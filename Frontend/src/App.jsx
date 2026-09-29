@@ -8,11 +8,11 @@ import {
 import MainLayout from "./layouts/mainLayout";
 import Dashboard from "./pages/dashboard";
 import Purchases from "./pages/purchases";
-
+import Transfers from "./pages/transfers";
+ 
 function App() {
   return (
     <BrowserRouter>
-
       <Routes>
 
         <Route element={<MainLayout />}>
@@ -28,6 +28,11 @@ function App() {
           />
 
           <Route
+            path="/transfers"
+            element={<Transfers />}
+          />
+
+          <Route
             path="*"
             element={
               <Navigate
@@ -40,7 +45,6 @@ function App() {
         </Route>
 
       </Routes>
-
     </BrowserRouter>
   );
 }

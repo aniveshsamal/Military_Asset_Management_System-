@@ -9,6 +9,7 @@ import MainLayout from "./layouts/mainLayout";
 import Dashboard from "./pages/dashboard";
 import Purchases from "./pages/purchases";
 import Transfers from "./pages/transfers";
+import Assignments from "./pages/assignments";
  
 function App() {
   return (
@@ -33,6 +34,11 @@ function App() {
           />
 
           <Route
+            path="/assignments"
+            element={<Assignments />}
+          />
+
+          <Route
             path="*"
             element={
               <Navigate
@@ -43,7 +49,6 @@ function App() {
           />
 
         </Route>
-
       </Routes>
     </BrowserRouter>
   );

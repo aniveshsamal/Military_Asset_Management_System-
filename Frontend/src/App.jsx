@@ -10,6 +10,7 @@ import Dashboard from "./pages/dashboard";
 import Purchases from "./pages/purchases";
 import Transfers from "./pages/transfers";
 import Assignments from "./pages/assignments";
+import Expenditure from "./pages/expenditure";
  
 function App() {
   return (
@@ -36,6 +37,11 @@ function App() {
           <Route
             path="/assignments"
             element={<Assignments />}
+          />
+
+          <Route
+            path="/expenditure"
+            element={<Expenditure />}
           />
 
           <Route

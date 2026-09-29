@@ -17,9 +17,6 @@ public class TransferRequest {
     private Long equipmentTypeId;
 
     @NotNull
-    private Long userId;
-
-    @NotNull
     @Min(1)
     private Integer quantity;
 
@@ -51,14 +48,6 @@ public class TransferRequest {
 
     public void setEquipmentTypeId(Long equipmentTypeId) {
         this.equipmentTypeId = equipmentTypeId;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public void setUserId(Long userId) {
-        this.userId = userId;
     }
 
     public Integer getQuantity() {

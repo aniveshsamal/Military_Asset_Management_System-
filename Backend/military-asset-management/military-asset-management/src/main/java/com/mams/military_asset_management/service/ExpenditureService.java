@@ -11,7 +11,6 @@ import com.mams.military_asset_management.repository.BaseRepository;
 import com.mams.military_asset_management.repository.EquipmentTypeRepository;
 import com.mams.military_asset_management.repository.ExpenditureRepository;
 import com.mams.military_asset_management.repository.InventoryRepository;
-import com.mams.military_asset_management.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,31 +22,33 @@ public class ExpenditureService {
     private final ExpenditureRepository expenditureRepository;
     private final BaseRepository baseRepository;
     private final EquipmentTypeRepository equipmentTypeRepository;
-    private final UserRepository userRepository;
     private final InventoryRepository inventoryRepository;
     private final AuditLogRepository auditLogRepository;
+    private final AuthorizationService authorizationService;
+    private final CurrentUserService currentUserService;
 
     public ExpenditureService(
             ExpenditureRepository expenditureRepository,
             BaseRepository baseRepository,
             EquipmentTypeRepository equipmentTypeRepository,
-            UserRepository userRepository,
             InventoryRepository inventoryRepository,
-            AuditLogRepository auditLogRepository
+            AuditLogRepository auditLogRepository,
+            AuthorizationService authorizationService,
+            CurrentUserService currentUserService
     ) {
         this.expenditureRepository = expenditureRepository;
         this.baseRepository = baseRepository;
         this.equipmentTypeRepository = equipmentTypeRepository;
-        this.userRepository = userRepository;
         this.inventoryRepository = inventoryRepository;
         this.auditLogRepository = auditLogRepository;
+        this.authorizationService = authorizationService;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
     public Expenditure createExpenditure(
             Long baseId,
             Long equipmentTypeId,
-            Long userId,
             Integer quantity,
             String reason,
             LocalDate expenditureDate,
@@ -56,34 +57,55 @@ public class ExpenditureService {
             String remarks
     ) {
 
+        // Validate quantity
         if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException(
                     "Expenditure quantity must be greater than zero"
             );
         }
 
+        // Get authenticated user from JWT
+        User user = currentUserService.getCurrentUser();
+
+        // Find base
         Base base = baseRepository.findById(baseId)
                 .orElseThrow(() ->
-                        new IllegalArgumentException("Base not found"));
-
-        EquipmentType equipmentType = equipmentTypeRepository.findById(equipmentTypeId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException("Equipment type not found"));
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException("User not found"));
-
-        Inventory inventory = inventoryRepository
-                .findByBaseAndEquipmentType(base, equipmentType)
-                .orElseThrow(() ->
                         new IllegalArgumentException(
-                                "No inventory found for this equipment at the selected base"
-                        ));
+                                "Base not found"
+                        )
+                );
 
+        // Check whether the authenticated user can access this base
+        authorizationService.checkBaseAccess(user, base);
+
+        // Find equipment type
+        EquipmentType equipmentType =
+                equipmentTypeRepository.findById(equipmentTypeId)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Equipment type not found"
+                                )
+                        );
+
+        // Find inventory
+        Inventory inventory =
+                inventoryRepository
+                        .findByBaseAndEquipmentType(
+                                base,
+                                equipmentType
+                        )
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "No inventory found for this equipment at the selected base"
+                                )
+                        );
+
+        // Calculate available inventory
         int availableQuantity =
-                inventory.getQuantity() - inventory.getAssignedQuantity();
+                inventory.getQuantity()
+                        - inventory.getAssignedQuantity();
 
+        // Prevent expenditure of unavailable assets
         if (quantity > availableQuantity) {
             throw new IllegalArgumentException(
                     "Insufficient available inventory. Available quantity: "
@@ -91,12 +113,14 @@ public class ExpenditureService {
             );
         }
 
+        // Reduce total inventory
         inventory.setQuantity(
                 inventory.getQuantity() - quantity
         );
 
         inventoryRepository.save(inventory);
 
+        // Create expenditure record
         Expenditure expenditure = new Expenditure();
 
         expenditure.setBase(base);
@@ -104,11 +128,13 @@ public class ExpenditureService {
         expenditure.setRecordedBy(user);
         expenditure.setQuantity(quantity);
         expenditure.setReason(reason);
+
         expenditure.setExpenditureDate(
                 expenditureDate != null
                         ? expenditureDate
                         : LocalDate.now()
         );
+
         expenditure.setReferenceNumber(referenceNumber);
         expenditure.setPersonnelOrUnit(personnelOrUnit);
         expenditure.setRemarks(remarks);
@@ -116,6 +142,7 @@ public class ExpenditureService {
         Expenditure savedExpenditure =
                 expenditureRepository.save(expenditure);
 
+        // Create audit log
         AuditLog auditLog = new AuditLog();
 
         auditLog.setUser(user);

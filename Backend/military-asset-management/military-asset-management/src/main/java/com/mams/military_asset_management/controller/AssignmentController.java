@@ -13,7 +13,9 @@ public class AssignmentController {
 
     private final AssignmentService assignmentService;
 
-    public AssignmentController(AssignmentService assignmentService) {
+    public AssignmentController(
+            AssignmentService assignmentService
+    ) {
         this.assignmentService = assignmentService;
     }
 
@@ -26,7 +28,6 @@ public class AssignmentController {
         return assignmentService.createAssignment(
                 request.getBaseId(),
                 request.getEquipmentTypeId(),
-                request.getUserId(),
                 request.getPersonnelName(),
                 request.getQuantity(),
                 request.getAssignmentDate(),

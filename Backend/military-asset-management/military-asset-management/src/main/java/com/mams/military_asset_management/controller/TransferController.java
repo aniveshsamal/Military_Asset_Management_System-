@@ -13,7 +13,9 @@ public class TransferController {
 
     private final TransferService transferService;
 
-    public TransferController(TransferService transferService) {
+    public TransferController(
+            TransferService transferService
+    ) {
         this.transferService = transferService;
     }
 
@@ -27,7 +29,6 @@ public class TransferController {
                 request.getFromBaseId(),
                 request.getToBaseId(),
                 request.getEquipmentTypeId(),
-                request.getUserId(),
                 request.getQuantity(),
                 request.getTransferDate(),
                 request.getReferenceNumber(),

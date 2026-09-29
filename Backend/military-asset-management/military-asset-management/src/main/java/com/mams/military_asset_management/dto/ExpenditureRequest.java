@@ -1,6 +1,7 @@
 package com.mams.military_asset_management.dto;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
@@ -14,13 +15,10 @@ public class ExpenditureRequest {
     private Long equipmentTypeId;
 
     @NotNull
-    private Long userId;
-
-    @NotNull
     @Min(1)
     private Integer quantity;
 
-    @NotNull
+    @NotBlank
     private String reason;
 
     private LocalDate expenditureDate;
@@ -45,14 +43,6 @@ public class ExpenditureRequest {
 
     public void setEquipmentTypeId(Long equipmentTypeId) {
         this.equipmentTypeId = equipmentTypeId;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public void setUserId(Long userId) {
-        this.userId = userId;
     }
 
     public Integer getQuantity() {

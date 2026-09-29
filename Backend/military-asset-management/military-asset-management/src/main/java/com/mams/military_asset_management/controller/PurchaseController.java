@@ -13,7 +13,9 @@ public class PurchaseController {
 
     private final PurchaseService purchaseService;
 
-    public PurchaseController(PurchaseService purchaseService) {
+    public PurchaseController(
+            PurchaseService purchaseService
+    ) {
         this.purchaseService = purchaseService;
     }
 
@@ -26,7 +28,6 @@ public class PurchaseController {
         return purchaseService.createPurchase(
                 request.getBaseId(),
                 request.getEquipmentTypeId(),
-                request.getUserId(),
                 request.getQuantity(),
                 request.getPurchaseDate(),
                 request.getSupplier(),

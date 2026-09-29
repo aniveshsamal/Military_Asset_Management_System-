@@ -1,6 +1,7 @@
 package com.mams.military_asset_management.dto;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
@@ -13,10 +14,7 @@ public class AssignmentRequest {
     @NotNull
     private Long equipmentTypeId;
 
-    @NotNull
-    private Long userId;
-
-    @NotNull
+    @NotBlank
     private String personnelName;
 
     @NotNull
@@ -41,14 +39,6 @@ public class AssignmentRequest {
 
     public void setEquipmentTypeId(Long equipmentTypeId) {
         this.equipmentTypeId = equipmentTypeId;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public void setUserId(Long userId) {
-        this.userId = userId;
     }
 
     public String getPersonnelName() {

@@ -28,7 +28,6 @@ public class ExpenditureController {
         return expenditureService.createExpenditure(
                 request.getBaseId(),
                 request.getEquipmentTypeId(),
-                request.getUserId(),
                 request.getQuantity(),
                 request.getReason(),
                 request.getExpenditureDate(),

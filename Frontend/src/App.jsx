@@ -12,6 +12,7 @@ import Transfers from "./pages/transfers";
 import Assignments from "./pages/assignments";
 import Expenditure from "./pages/expenditure";
 import AuditLogs from "./pages/auditLogs";
+import Users from "./pages/users";
  
 function App() {
   return (
@@ -48,6 +49,11 @@ function App() {
           <Route
             path="/audit-logs"
             element={<AuditLogs />}
+          />
+
+          <Route
+            path="/users"
+            element={<Users />}
           />
 
           <Route

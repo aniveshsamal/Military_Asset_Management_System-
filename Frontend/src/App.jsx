@@ -11,6 +11,7 @@ import Purchases from "./pages/purchases";
 import Transfers from "./pages/transfers";
 import Assignments from "./pages/assignments";
 import Expenditure from "./pages/expenditure";
+import AuditLogs from "./pages/auditLogs";
  
 function App() {
   return (
@@ -42,6 +43,11 @@ function App() {
           <Route
             path="/expenditure"
             element={<Expenditure />}
+          />
+
+          <Route
+            path="/audit-logs"
+            element={<AuditLogs />}
           />
 
           <Route

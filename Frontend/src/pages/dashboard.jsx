@@ -1,95 +1,175 @@
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
+import apiRequest from "../services/api";
+import { getCurrentUser, isBaseScoped } from "../services/roleAccess";
 
 function Dashboard() {
+  const today = new Date().toISOString().split("T")[0];
+  const user = getCurrentUser();
+  const baseScoped = isBaseScoped(user);
+  const assignedBaseId = user.baseId == null ? "" : String(user.baseId);
+
   const [showMovement, setShowMovement] = useState(false);
+
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedBase, setSelectedBase] = useState(baseScoped ? assignedBaseId : "");
+  const [selectedEquipment, setSelectedEquipment] = useState("");
+
+  const [bases, setBases] = useState([]);
+  const [equipmentTypes, setEquipmentTypes] = useState([]);
+
+  const [dashboard, setDashboard] = useState({
+    openingBalance: 0,
+    purchases: 0,
+    transferIn: 0,
+    transferOut: 0,
+    netMovement: 0,
+    assigned: 0,
+    expended: 0,
+    closingBalance: 0,
+  });
+
+  const [movement, setMovement] = useState({
+    purchases: 0,
+    transferIn: 0,
+    transferOut: 0,
+    netMovement: 0,
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [movementLoading, setMovementLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const stats = [
     {
       title: "Opening Balance",
-      value: "12,450",
+      value: dashboard.openingBalance,
       icon: "bi-box-seam",
       color: "primary",
     },
     {
       title: "Purchases",
-      value: "1,250",
+      value: dashboard.purchases,
       icon: "bi-cart-plus",
       color: "success",
     },
     {
       title: "Transfer In",
-      value: "480",
+      value: dashboard.transferIn,
       icon: "bi-arrow-down-left",
       color: "info",
     },
     {
       title: "Transfer Out",
-      value: "320",
+      value: dashboard.transferOut,
       icon: "bi-arrow-up-right",
       color: "warning",
     },
     {
       title: "Assigned",
-      value: "2,180",
+      value: dashboard.assigned,
       icon: "bi-person-check",
       color: "secondary",
     },
     {
       title: "Expended",
-      value: "640",
+      value: dashboard.expended,
       icon: "bi-box-arrow-up-right",
       color: "danger",
     },
     {
       title: "Closing Balance",
-      value: "13,220",
+      value: dashboard.closingBalance,
       icon: "bi-check-circle",
       color: "success",
     },
   ];
 
-  const transactions = [
-    {
-      type: "Purchase",
-      equipment: "Rifle",
-      quantity: 150,
-      base: "Base Alpha",
-      date: "29 Sep 2026",
-      status: "Completed",
-    },
-    {
-      type: "Transfer In",
-      equipment: "Ammunition",
-      quantity: 500,
-      base: "Base Alpha",
-      date: "28 Sep 2026",
-      status: "Completed",
-    },
-    {
-      type: "Transfer Out",
-      equipment: "Rifle",
-      quantity: 80,
-      base: "Base Alpha",
-      date: "27 Sep 2026",
-      status: "Completed",
-    },
-    {
-      type: "Purchase",
-      equipment: "Helmet",
-      quantity: 200,
-      base: "Base Bravo",
-      date: "26 Sep 2026",
-      status: "Completed",
-    },
-    {
-      type: "Expenditure",
-      equipment: "Ammunition",
-      quantity: 120,
-      base: "Base Alpha",
-      date: "25 Sep 2026",
-      status: "Completed",
-    },
-  ];
+  useEffect(() => {
+    loadFilterData();
+  }, []);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [selectedDate, selectedBase, selectedEquipment]);
+
+  const loadFilterData = async () => {
+    try {
+      const [baseData, equipmentData] = await Promise.all([
+        apiRequest("/bases"),
+        apiRequest("/equipment-types"),
+      ]);
+
+      setBases(baseData);
+      setEquipmentTypes(equipmentData);
+    } catch (error) {
+      setError(error.message);
+    }
+  };
+
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const params = new URLSearchParams();
+
+      if (selectedBase) {
+        params.append("baseId", selectedBase);
+      }
+
+      if (selectedEquipment) {
+        params.append("equipmentTypeId", selectedEquipment);
+      }
+
+      if (selectedDate) {
+        params.append("startDate", selectedDate);
+        params.append("endDate", selectedDate);
+      }
+
+      const data = await apiRequest(
+        `/dashboard?${params.toString()}`
+      );
+
+      setDashboard(data);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMovementDetails = async () => {
+    setMovementLoading(true);
+
+    try {
+      const params = new URLSearchParams();
+
+      if (selectedBase) {
+        params.append("baseId", selectedBase);
+      }
+
+      if (selectedEquipment) {
+        params.append("equipmentTypeId", selectedEquipment);
+      }
+
+      if (selectedDate) {
+        params.append("startDate", selectedDate);
+        params.append("endDate", selectedDate);
+      }
+
+      const data = await apiRequest(
+        `/dashboard/movement-details?${params.toString()}`
+      );
+
+      setMovement(data);
+      setShowMovement(true);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setMovementLoading(false);
+    }
+  };
 
   return (
     <div className="container-fluid px-0">
@@ -106,11 +186,15 @@ function Dashboard() {
           </p>
         </div>
 
-        <button className="btn btn-primary">
-          <i className="bi bi-plus-lg me-2"></i>
-          Record Transaction
-        </button>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className="alert alert-danger">
+          <i className="bi bi-exclamation-triangle me-2"></i>
+          {error}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card bg-dark border-secondary mb-4">
@@ -125,7 +209,10 @@ function Dashboard() {
               <input
                 type="date"
                 className="form-control bg-black text-light border-secondary"
-                defaultValue="2026-09-29"
+                value={selectedDate}
+                onChange={(e) =>
+                  setSelectedDate(e.target.value)
+                }
               />
             </div>
 
@@ -134,11 +221,24 @@ function Dashboard() {
                 Base
               </label>
 
-              <select className="form-select bg-black text-light border-secondary">
-                <option>All Bases</option>
-                <option>Base Alpha</option>
-                <option>Base Bravo</option>
-                <option>Base Charlie</option>
+              <select
+                className="form-select bg-black text-light border-secondary"
+                value={baseScoped ? assignedBaseId : selectedBase}
+                disabled={baseScoped}
+                onChange={(e) =>
+                  setSelectedBase(e.target.value)
+                }
+              >
+                {!baseScoped && <option value="">All Bases</option>}
+
+                {bases.map((base) => (
+                  <option
+                    key={base.id}
+                    value={base.id}
+                  >
+                    {base.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -147,12 +247,23 @@ function Dashboard() {
                 Equipment Type
               </label>
 
-              <select className="form-select bg-black text-light border-secondary">
-                <option>All Equipment</option>
-                <option>Rifle</option>
-                <option>Ammunition</option>
-                <option>Helmet</option>
-                <option>Vehicle</option>
+              <select
+                className="form-select bg-black text-light border-secondary"
+                value={selectedEquipment}
+                onChange={(e) =>
+                  setSelectedEquipment(e.target.value)
+                }
+              >
+                <option value="">All Equipment</option>
+
+                {equipmentTypes.map((equipment) => (
+                  <option
+                    key={equipment.id}
+                    value={equipment.id}
+                  >
+                    {equipment.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -179,7 +290,7 @@ function Dashboard() {
                     </p>
 
                     <h4 className="text-white fw-bold mb-0">
-                      {stat.value}
+                      {loading ? "..." : stat.value}
                     </h4>
                   </div>
 
@@ -227,7 +338,9 @@ function Dashboard() {
                   </p>
 
                   <h3 className="text-white fw-bold mb-0">
-                    +1,410
+                    {loading
+                      ? "..."
+                      : `+${dashboard.netMovement}`}
                   </h3>
 
                   <small className="text-secondary">
@@ -241,110 +354,22 @@ function Dashboard() {
             <div className="col-md-4 text-md-end mt-3 mt-md-0">
               <button
                 className="btn btn-outline-primary"
-                onClick={() => setShowMovement(true)}
+                onClick={loadMovementDetails}
+                disabled={movementLoading}
               >
-                View Details
-                <i className="bi bi-arrow-right ms-2"></i>
+                {movementLoading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2"></span>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    View Details
+                    <i className="bi bi-arrow-right ms-2"></i>
+                  </>
+                )}
               </button>
             </div>
-
-          </div>
-
-        </div>
-      </div>
-
-      {/* Recent Transactions */}
-      <div className="card bg-dark border-secondary">
-
-        <div className="card-header bg-transparent border-secondary py-3">
-
-          <div className="d-flex justify-content-between align-items-center">
-
-            <div>
-              <h5 className="text-white mb-1">
-                Recent Transactions
-              </h5>
-
-              <small className="text-secondary">
-                Latest asset movements and activities
-              </small>
-            </div>
-
-            <button className="btn btn-sm btn-outline-secondary">
-              View All
-            </button>
-
-          </div>
-
-        </div>
-
-        <div className="card-body p-0">
-
-          <div className="table-responsive">
-
-            <table className="table table-dark table-hover align-middle mb-0">
-
-              <thead>
-                <tr className="text-secondary">
-                  <th className="px-4">Type</th>
-                  <th>Equipment</th>
-                  <th>Quantity</th>
-                  <th>Base</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-
-              <tbody>
-
-                {transactions.map((transaction, index) => (
-                  <tr key={index}>
-
-                    <td className="px-4">
-                      <span
-                        className={`badge ${
-                          transaction.type === "Purchase"
-                            ? "text-bg-success"
-                            : transaction.type === "Transfer In"
-                            ? "text-bg-info"
-                            : transaction.type === "Transfer Out"
-                            ? "text-bg-warning"
-                            : "text-bg-danger"
-                        }`}
-                      >
-                        {transaction.type}
-                      </span>
-                    </td>
-
-                    <td className="text-white">
-                      {transaction.equipment}
-                    </td>
-
-                    <td className="text-white fw-semibold">
-                      {transaction.quantity}
-                    </td>
-
-                    <td className="text-secondary">
-                      {transaction.base}
-                    </td>
-
-                    <td className="text-secondary">
-                      {transaction.date}
-                    </td>
-
-                    <td>
-                      <span className="badge text-bg-success">
-                        <i className="bi bi-check-circle me-1"></i>
-                        {transaction.status}
-                      </span>
-                    </td>
-
-                  </tr>
-                ))}
-
-              </tbody>
-
-            </table>
 
           </div>
 
@@ -391,7 +416,7 @@ function Dashboard() {
                   </span>
 
                   <span className="text-success fw-semibold">
-                    +1,250
+                    +{movement.purchases}
                   </span>
                 </div>
 
@@ -401,7 +426,7 @@ function Dashboard() {
                   </span>
 
                   <span className="text-info fw-semibold">
-                    +480
+                    +{movement.transferIn}
                   </span>
                 </div>
 
@@ -411,7 +436,7 @@ function Dashboard() {
                   </span>
 
                   <span className="text-warning fw-semibold">
-                    -320
+                    -{movement.transferOut}
                   </span>
                 </div>
 
@@ -421,7 +446,8 @@ function Dashboard() {
                   </span>
 
                   <span className="text-primary fw-bold">
-                    +1,410
+                    {movement.netMovement >= 0 ? "+" : ""}
+                    {movement.netMovement}
                   </span>
                 </div>
 

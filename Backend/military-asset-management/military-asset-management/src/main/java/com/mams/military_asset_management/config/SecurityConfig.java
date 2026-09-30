@@ -3,6 +3,7 @@ package com.mams.military_asset_management.config;
 import com.mams.military_asset_management.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -17,96 +18,130 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+        private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter
-    ) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-    }
+        public SecurityConfig(
+                        JwtAuthenticationFilter jwtAuthenticationFilter) {
+                this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+                return new BCryptPasswordEncoder();
+        }
 
-    @Bean
-    public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration configuration
-    ) throws Exception {
+        @Bean
+        public AuthenticationManager authenticationManager(
+                        AuthenticationConfiguration configuration) throws Exception {
+                return configuration.getAuthenticationManager();
+        }
 
-        return configuration.getAuthenticationManager();
-    }
+        @Bean
+        public SecurityFilterChain securityFilterChain(
+                        HttpSecurity http) throws Exception {
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http
-    ) throws Exception {
+                http
+                                .csrf(csrf -> csrf.disable())
 
-        http
-                .csrf(csrf -> csrf.disable())
+                                .cors(cors -> {
+                                })
 
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
-                )
+                                .sessionManagement(session -> session.sessionCreationPolicy(
+                                                SessionCreationPolicy.STATELESS))
 
-                .authorizeHttpRequests(auth -> auth
+                                .authorizeHttpRequests(auth -> auth
 
-                        .requestMatchers("/api/auth/**")
-                        .permitAll()
+                                                // Authentication
+                                                .requestMatchers("/api/auth/**")
+                                                .permitAll()
 
-                        .requestMatchers("/api/users/**")
-                        .hasRole("ADMIN")
+                                                // Authenticated user's own profile
+                                                .requestMatchers("/api/profile/**")
+                                                .authenticated()
 
-                        .requestMatchers("/api/audit-logs/**")
-                        .hasRole("ADMIN")
+                                                // Users - Admin only
+                                                .requestMatchers("/api/users/**")
+                                                .hasRole("ADMIN")
 
-                        .requestMatchers("/api/bases/**")
-                        .hasAnyRole(
-                                "ADMIN",
-                                "BASE_COMMANDER"
-                        )
+                                                // Audit logs - Admin only
+                                                .requestMatchers("/api/audit-logs/**")
+                                                .hasRole("ADMIN")
 
-                        .requestMatchers("/api/equipment-types/**")
-                        .hasAnyRole(
-                                "ADMIN",
-                                "BASE_COMMANDER"
-                        )
+                                                // Bases
+                                                .requestMatchers(HttpMethod.GET, "/api/bases/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER",
+                                                                "LOGISTICS_OFFICER")
 
-                        .requestMatchers("/api/purchases/**")
-                        .hasAnyRole(
-                                "ADMIN",
-                                "LOGISTICS_OFFICER"
-                        )
+                                                .requestMatchers(HttpMethod.POST, "/api/bases/**")
+                                                .hasRole("ADMIN")
 
-                        .requestMatchers("/api/transfers/**")
-                        .hasAnyRole(
-                                "ADMIN",
-                                "LOGISTICS_OFFICER"
-                        )
+                                                // Equipment types
+                                                .requestMatchers(
+                                                                HttpMethod.GET,
+                                                                "/api/equipment-types/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER",
+                                                                "LOGISTICS_OFFICER")
 
-                        .requestMatchers("/api/assignments/**")
-                        .hasAnyRole(
-                                "ADMIN",
-                                "BASE_COMMANDER"
-                        )
+                                                .requestMatchers(
+                                                                HttpMethod.POST,
+                                                                "/api/equipment-types/**")
+                                                .hasRole("ADMIN")
 
-                        .requestMatchers("/api/expenditures/**")
-                        .hasAnyRole(
-                                "ADMIN",
-                                "BASE_COMMANDER"
-                        )
+                                                // Purchases
+                                                .requestMatchers(
+                                                                "/api/purchases/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER",
+                                                                "LOGISTICS_OFFICER")
 
-                        .anyRequest().authenticated()
-                )
+                                                // Transfers
+                                                .requestMatchers(
+                                                                "/api/transfers/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER",
+                                                                "LOGISTICS_OFFICER")
 
-                .addFilterBefore(
-                        jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                );
+                                                // Assignments
+                                                .requestMatchers(
+                                                                "/api/assignments/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER")
 
-        return http.build();
-    }
+                                                // Expenditures
+                                                .requestMatchers(
+                                                                "/api/expenditures/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER")
+
+                                                // Inventory
+                                                .requestMatchers(
+                                                                "/api/inventory/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER")
+
+                                                // Dashboard
+                                                .requestMatchers(
+                                                                "/api/dashboard/**")
+                                                .hasAnyRole(
+                                                                "ADMIN",
+                                                                "BASE_COMMANDER")
+
+                                                // Everything else
+                                                .anyRequest().authenticated())
+
+                                .addFilterBefore(
+                                                jwtAuthenticationFilter,
+                                                UsernamePasswordAuthenticationFilter.class);
+
+                return http.build();
+        }
 }

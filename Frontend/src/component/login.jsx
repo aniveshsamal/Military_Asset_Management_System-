@@ -1,21 +1,50 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import apiRequest from "../services/api";
+import { getRoleHome } from "../services/roleAccess";
 
 function Login() {
   const navigate = useNavigate();
+
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
 
-  const handleSubmit = (e) => {
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!email || !password) {
-      return;
-    }
+    setError("");
+    setLoading(true);
 
-    navigate("/dashboard");
+    try {
+      const data = await apiRequest("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+
+      localStorage.setItem("token", data.token);
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          name: data.name,
+          email: data.email,
+          role: data.role,
+          baseId: data.baseId,
+        })
+      );
+
+      navigate(getRoleHome(data.role), { replace: true });
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -39,6 +68,7 @@ function Login() {
                   <h4 className="mb-0 fw-bold">
                     Military Asset Management
                   </h4>
+
                   <small className="text-secondary">
                     Secure Logistics Platform
                   </small>
@@ -48,10 +78,15 @@ function Login() {
               <h1 className="display-4 fw-bold mb-4">
                 Manage assets.
                 <br />
-                <span className="text-primary">Maintain readiness.</span>
+                <span className="text-primary">
+                  Maintain readiness.
+                </span>
               </h1>
 
-              <p className="text-secondary fs-5" style={{ maxWidth: "600px" }}>
+              <p
+                className="text-secondary fs-5"
+                style={{ maxWidth: "600px" }}
+              >
                 A centralized platform for managing military assets,
                 purchases, transfers, assignments, and expenditures
                 across multiple bases.
@@ -59,14 +94,21 @@ function Login() {
             </div>
 
             {/* Features */}
-            <div className="row g-3" style={{ maxWidth: "650px" }}>
+            <div
+              className="row g-3"
+              style={{ maxWidth: "650px" }}
+            >
               <div className="col-md-6">
                 <div className="d-flex align-items-center gap-3">
                   <div className="text-primary">
                     <i className="bi bi-box-seam fs-4"></i>
                   </div>
+
                   <div>
-                    <div className="fw-semibold">Asset Management</div>
+                    <div className="fw-semibold">
+                      Asset Management
+                    </div>
+
                     <small className="text-secondary">
                       Track assets and inventory
                     </small>
@@ -79,8 +121,12 @@ function Login() {
                   <div className="text-primary">
                     <i className="bi bi-arrow-left-right fs-4"></i>
                   </div>
+
                   <div>
-                    <div className="fw-semibold">Base Transfers</div>
+                    <div className="fw-semibold">
+                      Base Transfers
+                    </div>
+
                     <small className="text-secondary">
                       Manage inter-base movements
                     </small>
@@ -93,8 +139,12 @@ function Login() {
                   <div className="text-primary">
                     <i className="bi bi-person-check fs-4"></i>
                   </div>
+
                   <div>
-                    <div className="fw-semibold">Assignments</div>
+                    <div className="fw-semibold">
+                      Assignments
+                    </div>
+
                     <small className="text-secondary">
                       Track personnel assignments
                     </small>
@@ -107,8 +157,12 @@ function Login() {
                   <div className="text-primary">
                     <i className="bi bi-journal-text fs-4"></i>
                   </div>
+
                   <div>
-                    <div className="fw-semibold">Audit Logging</div>
+                    <div className="fw-semibold">
+                      Audit Logging
+                    </div>
+
                     <small className="text-secondary">
                       Maintain complete activity records
                     </small>
@@ -126,7 +180,10 @@ function Login() {
           {/* Right Login Section */}
           <div className="col-lg-5 d-flex align-items-center justify-content-center bg-black p-4">
 
-            <div className="w-100" style={{ maxWidth: "440px" }}>
+            <div
+              className="w-100"
+              style={{ maxWidth: "440px" }}
+            >
 
               {/* Mobile Brand */}
               <div className="d-lg-none text-center mb-5">
@@ -165,6 +222,17 @@ function Login() {
                     </p>
                   </div>
 
+                  {/* Error */}
+                  {error && (
+                    <div
+                      className="alert alert-danger py-2"
+                      role="alert"
+                    >
+                      <i className="bi bi-exclamation-triangle me-2"></i>
+                      {error}
+                    </div>
+                  )}
+
                   <form onSubmit={handleSubmit}>
 
                     {/* Email */}
@@ -183,7 +251,9 @@ function Login() {
                           className="form-control bg-black text-light border-secondary"
                           placeholder="name@organization.com"
                           value={email}
-                          onChange={(e) => setEmail(e.target.value)}
+                          onChange={(e) =>
+                            setEmail(e.target.value)
+                          }
                           required
                         />
                       </div>
@@ -201,11 +271,17 @@ function Login() {
                         </span>
 
                         <input
-                          type={showPassword ? "text" : "password"}
+                          type={
+                            showPassword
+                              ? "text"
+                              : "password"
+                          }
                           className="form-control bg-black text-light border-secondary"
                           placeholder="Enter your password"
                           value={password}
-                          onChange={(e) => setPassword(e.target.value)}
+                          onChange={(e) =>
+                            setPassword(e.target.value)
+                          }
                           required
                         />
 
@@ -227,7 +303,7 @@ function Login() {
                       </div>
                     </div>
 
-                    {/* Remember + Forgot */}
+                    {/* Remember */}
                     <div className="d-flex justify-content-between align-items-center mb-4">
 
                       <div className="form-check">
@@ -237,7 +313,9 @@ function Login() {
                           id="rememberMe"
                           checked={rememberMe}
                           onChange={(e) =>
-                            setRememberMe(e.target.checked)
+                            setRememberMe(
+                              e.target.checked
+                            )
                           }
                         />
 
@@ -249,25 +327,29 @@ function Login() {
                         </label>
                       </div>
 
-                      <button
-                        type="button"
-                        className="btn btn-link text-primary text-decoration-none p-0"
-                        onClick={() =>
-                          alert("Password reset will be implemented later.")
-                        }
-                      >
-                        Forgot password?
-                      </button>
-
                     </div>
 
                     {/* Sign In */}
                     <button
                       type="submit"
                       className="btn btn-primary w-100 py-2 fw-semibold"
+                      disabled={loading}
                     >
-                      Sign In
-                      <i className="bi bi-arrow-right ms-2"></i>
+                      {loading ? (
+                        <>
+                          <span
+                            className="spinner-border spinner-border-sm me-2"
+                            role="status"
+                            aria-hidden="true"
+                          ></span>
+                          Signing in...
+                        </>
+                      ) : (
+                        <>
+                          Sign In
+                          <i className="bi bi-arrow-right ms-2"></i>
+                        </>
+                      )}
                     </button>
 
                   </form>

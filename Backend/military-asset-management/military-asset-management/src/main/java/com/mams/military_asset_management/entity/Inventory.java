@@ -1,6 +1,6 @@
 package com.mams.military_asset_management.entity;
 
-import com.mams.military_asset_management.entity.Base;
+
 import jakarta.persistence.*;
 
 @Entity

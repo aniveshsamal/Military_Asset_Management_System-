@@ -1,703 +1,226 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import apiRequest from "../services/api";
+
+const roles = ["ADMIN", "BASE_COMMANDER", "LOGISTICS_OFFICER"];
+
+const roleLabel = (role) => ({
+  ADMIN: "Admin",
+  BASE_COMMANDER: "Base Commander",
+  LOGISTICS_OFFICER: "Logistics Officer",
+}[role] || role);
+
+const emptyForm = {
+  name: "",
+  email: "",
+  password: "",
+  role: "",
+  baseId: "",
+  active: true,
+};
 
 function Users() {
-  const [showModal, setShowModal] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [bases, setBases] = useState([]);
+  const [filters, setFilters] = useState({ search: "", role: "", active: "" });
+  const [form, setForm] = useState(emptyForm);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const users = [
-    {
-      id: "USR-001",
-      name: "Rajesh Kumar",
-      email: "rajesh.kumar@milasset.local",
-      role: "Admin",
-      base: "All Bases",
-      status: "Active",
-      lastLogin: "2026-09-29 10:42",
-    },
-    {
-      id: "USR-002",
-      name: "Vikram Singh",
-      email: "vikram.singh@milasset.local",
-      role: "Base Commander",
-      base: "Base Alpha",
-      status: "Active",
-      lastLogin: "2026-09-29 10:18",
-    },
-    {
-      id: "USR-003",
-      name: "Amit Sharma",
-      email: "amit.sharma@milasset.local",
-      role: "Logistics Officer",
-      base: "Base Bravo",
-      status: "Active",
-      lastLogin: "2026-09-29 09:55",
-    },
-    {
-      id: "USR-004",
-      name: "Suresh Das",
-      email: "suresh.das@milasset.local",
-      role: "Base Commander",
-      base: "Base Charlie",
-      status: "Active",
-      lastLogin: "2026-09-28 18:42",
-    },
-    {
-      id: "USR-005",
-      name: "Manoj Verma",
-      email: "manoj.verma@milasset.local",
-      role: "Logistics Officer",
-      base: "Base Alpha",
-      status: "Inactive",
-      lastLogin: "2026-09-24 14:21",
-    },
-  ];
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+        apiRequest("/users"),
+        apiRequest("/bases"),
+    ]).then(([userData, baseData]) => {
+      if (cancelled) return;
+      setUsers(Array.isArray(userData) ? userData : []);
+      setBases(Array.isArray(baseData) ? baseData : []);
+    }).catch((requestError) => {
+      if (cancelled) return;
+      setError(requestError.message);
+      setUsers([]);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [refreshToken]);
+
+  const visibleUsers = useMemo(() => users.filter((user) => {
+    const search = filters.search.trim().toLowerCase();
+    const matchesSearch = !search
+      || user.name?.toLowerCase().includes(search)
+      || user.email?.toLowerCase().includes(search);
+    const matchesRole = !filters.role || user.role === filters.role;
+    const matchesStatus = filters.active === ""
+      || String(user.active) === filters.active;
+    return matchesSearch && matchesRole && matchesStatus;
+  }), [users, filters]);
 
   const roleBadge = (role) => {
-    if (role === "Admin") {
-      return "badge text-bg-danger";
-    }
-
-    if (role === "Base Commander") {
-      return "badge text-bg-primary";
-    }
-
+    if (role === "ADMIN") return "badge text-bg-danger";
+    if (role === "BASE_COMMANDER") return "badge text-bg-primary";
     return "badge text-bg-info";
   };
 
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      await apiRequest("/users", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          role: form.role,
+          base: form.baseId ? { id: Number(form.baseId) } : null,
+          active: form.active,
+        }),
+      });
+      setShowModal(false);
+      setForm(emptyForm);
+      setSuccess("User created successfully.");
+      setLoading(true);
+      setError("");
+      setRefreshToken((current) => current + 1);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const roleCounts = roles.map((role) => ({
+    role,
+    count: users.filter((user) => user.role === role).length,
+  }));
+
   return (
     <div className="container-fluid py-4">
-
-      {/* Header */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-
         <div>
-          <h3 className="fw-bold mb-1">
-            <i className="bi bi-people me-2"></i>
-            Users & Access Control
-          </h3>
-
-          <p className="text-secondary mb-0">
-            Manage users, roles, and base-level access.
-          </p>
+          <h3 className="text-white fw-bold mb-1"><i className="bi bi-people me-2"></i>Users &amp; Access Control</h3>
+          <p className="text-secondary mb-0">Manage user accounts and assigned access scope.</p>
         </div>
-
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowModal(true)}
-        >
-          <i className="bi bi-person-plus me-2"></i>
-          Add User
+        <button className="btn btn-primary" onClick={() => { setError(""); setShowModal(true); }}>
+          <i className="bi bi-person-plus me-2"></i>Add User
         </button>
-
       </div>
 
-      {/* Role Cards */}
+      {(error || success) && <div className={`alert ${error ? "alert-danger" : "alert-success"}`} role="alert">{error || success}</div>}
+
       <div className="row g-3 mb-4">
-
-        <div className="col-12 col-md-4">
-          <div className="card bg-dark border-secondary h-100">
-            <div className="card-body">
-
-              <div className="d-flex justify-content-between mb-3">
-                <h5 className="fw-semibold mb-0">
-                  Admin
-                </h5>
-
-                <i className="bi bi-shield-lock text-danger fs-4"></i>
-              </div>
-
-              <p className="text-secondary small mb-3">
-                Full system administration and access to all bases.
-              </p>
-
-              <span className="badge text-bg-danger">
-                Full Access
-              </span>
-
-            </div>
+        {roleCounts.map(({ role, count }) => (
+          <div className="col-12 col-md-4" key={role}>
+            <div className="card bg-dark border-secondary h-100"><div className="card-body d-flex justify-content-between align-items-center">
+              <div><small className="text-secondary">{roleLabel(role)}</small><h3 className="fw-bold mt-2 mb-0 text-white">{count.toLocaleString()}</h3></div>
+              <span className={roleBadge(role)}>{count === 1 ? "account" : "accounts"}</span>
+            </div></div>
           </div>
-        </div>
-
-        <div className="col-12 col-md-4">
-          <div className="card bg-dark border-secondary h-100">
-            <div className="card-body">
-
-              <div className="d-flex justify-content-between mb-3">
-                <h5 className="fw-semibold mb-0">
-                  Base Commander
-                </h5>
-
-                <i className="bi bi-building text-primary fs-4"></i>
-              </div>
-
-              <p className="text-secondary small mb-3">
-                Manage inventory and operations for the assigned base.
-              </p>
-
-              <span className="badge text-bg-primary">
-                Base Scoped
-              </span>
-
-            </div>
-          </div>
-        </div>
-
-        <div className="col-12 col-md-4">
-          <div className="card bg-dark border-secondary h-100">
-            <div className="card-body">
-
-              <div className="d-flex justify-content-between mb-3">
-                <h5 className="fw-semibold mb-0">
-                  Logistics Officer
-                </h5>
-
-                <i className="bi bi-box-seam text-info fs-4"></i>
-              </div>
-
-              <p className="text-secondary small mb-3">
-                Manage permitted logistics activities such as purchases and transfers.
-              </p>
-
-              <span className="badge text-bg-info">
-                Limited Access
-              </span>
-
-            </div>
-          </div>
-        </div>
-
+        ))}
       </div>
 
-      {/* Permission Matrix */}
-      <div className="card bg-dark border-secondary mb-4">
-
-        <div className="card-header bg-transparent border-secondary py-3">
-          <h5 className="mb-1 fw-semibold">
-            Role Permissions
-          </h5>
-
-          <small className="text-secondary">
-            Application-level permission model
-          </small>
+      <div className="card bg-dark border-secondary mb-4"><div className="card-body"><div className="row g-3">
+        <div className="col-12 col-md-4"><label className="form-label text-secondary">Search User</label>
+          <input type="search" className="form-control bg-dark text-light border-secondary" placeholder="Name or email" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
         </div>
-
-        <div className="table-responsive">
-
-          <table className="table table-dark table-hover align-middle mb-0">
-
-            <thead>
-              <tr>
-                <th>Permission</th>
-                <th>Admin</th>
-                <th>Base Commander</th>
-                <th>Logistics Officer</th>
-              </tr>
-            </thead>
-
-            <tbody>
-
-              <tr>
-                <td>View Dashboard</td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-              </tr>
-
-              <tr>
-                <td>Manage Purchases</td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-              </tr>
-
-              <tr>
-                <td>Manage Transfers</td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-              </tr>
-
-              <tr>
-                <td>Manage Assignments</td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-x-circle-fill text-danger"></i></td>
-              </tr>
-
-              <tr>
-                <td>Manage Expenditure</td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-x-circle-fill text-danger"></i></td>
-              </tr>
-
-              <tr>
-                <td>View Audit Logs</td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-x-circle-fill text-danger"></i></td>
-              </tr>
-
-              <tr>
-                <td>Manage Users</td>
-                <td><i className="bi bi-check-circle-fill text-success"></i></td>
-                <td><i className="bi bi-x-circle-fill text-danger"></i></td>
-                <td><i className="bi bi-x-circle-fill text-danger"></i></td>
-              </tr>
-
-            </tbody>
-
-          </table>
-
+        <div className="col-12 col-md-4"><label className="form-label text-secondary">Role</label>
+          <select className="form-select bg-dark text-light border-secondary" value={filters.role} onChange={(event) => setFilters((current) => ({ ...current, role: event.target.value }))}>
+            <option value="">All Roles</option>{roles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
+          </select>
         </div>
-
-      </div>
-
-      {/* Filters */}
-      <div className="card bg-dark border-secondary mb-4">
-
-        <div className="card-body">
-
-          <div className="row g-3">
-
-            <div className="col-12 col-md-4">
-
-              <label className="form-label text-secondary">
-                Search User
-              </label>
-
-              <input
-                type="text"
-                className="form-control bg-dark text-light border-secondary"
-                placeholder="Name or email"
-              />
-
-            </div>
-
-            <div className="col-12 col-md-4">
-
-              <label className="form-label text-secondary">
-                Role
-              </label>
-
-              <select className="form-select bg-dark text-light border-secondary">
-                <option>All Roles</option>
-                <option>Admin</option>
-                <option>Base Commander</option>
-                <option>Logistics Officer</option>
-              </select>
-
-            </div>
-
-            <div className="col-12 col-md-4">
-
-              <label className="form-label text-secondary">
-                Status
-              </label>
-
-              <select className="form-select bg-dark text-light border-secondary">
-                <option>All Status</option>
-                <option>Active</option>
-                <option>Inactive</option>
-              </select>
-
-            </div>
-
-          </div>
-
+        <div className="col-12 col-md-4"><label className="form-label text-secondary">Status</label>
+          <select className="form-select bg-dark text-light border-secondary" value={filters.active} onChange={(event) => setFilters((current) => ({ ...current, active: event.target.value }))}>
+            <option value="">All Statuses</option><option value="true">Active</option><option value="false">Inactive</option>
+          </select>
         </div>
+      </div></div></div>
 
-      </div>
-
-      {/* Users Table */}
       <div className="card bg-dark border-secondary">
-
-        <div className="card-header bg-transparent border-secondary py-3">
-
-          <div>
-            <h5 className="mb-1 fw-semibold">
-              System Users
-            </h5>
-
-            <small className="text-secondary">
-              User accounts and assigned access scope
-            </small>
-          </div>
-
+        <div className="card-header bg-transparent border-secondary d-flex justify-content-between align-items-center">
+          <div><h5 className="mb-1 fw-semibold">System Users</h5><small className="text-secondary">User accounts and assigned access scope</small></div>
+          {!loading && <span className="text-secondary small">{visibleUsers.length} users</span>}
         </div>
-
-        <div className="table-responsive">
-
-          <table className="table table-dark table-hover align-middle mb-0">
-
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Base</th>
-                <th>Status</th>
-                <th>Last Login</th>
-                <th className="text-end">Action</th>
-              </tr>
-            </thead>
-
-            <tbody>
-
-              {users.map((user) => (
-
-                <tr key={user.id}>
-
-                  <td>
-
-                    <div className="fw-semibold">
-                      {user.name}
-                    </div>
-
-                    <small className="text-secondary">
-                      {user.email}
-                    </small>
-
-                  </td>
-
-                  <td>
-                    <span className={roleBadge(user.role)}>
-                      {user.role}
-                    </span>
-                  </td>
-
-                  <td>
-                    {user.base}
-                  </td>
-
-                  <td>
-
-                    {user.status === "Active" ? (
-                      <span className="badge text-bg-success">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="badge text-bg-secondary">
-                        Inactive
-                      </span>
-                    )}
-
-                  </td>
-
-                  <td>
-                    {user.lastLogin}
-                  </td>
-
-                  <td className="text-end">
-
-                    <button
-                      className="btn btn-sm btn-outline-light"
-                      onClick={() => setSelectedUser(user)}
-                    >
-                      <i className="bi bi-eye me-1"></i>
-                      View
-                    </button>
-
-                  </td>
-
-                </tr>
-
-              ))}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
+        <div className="table-responsive"><table className="table table-dark table-hover align-middle mb-0">
+          <thead><tr><th>User</th><th>Role</th><th>Base</th><th>Status</th><th className="text-end">Action</th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan="5" className="text-center py-5">Loading users...</td></tr>
+              : visibleUsers.length === 0 ? <tr><td colSpan="5" className="text-center py-5 text-secondary">No users found.</td></tr>
+                : visibleUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td><div className="fw-semibold">{user.name}</div><small className="text-secondary">{user.email}</small></td>
+                    <td><span className={roleBadge(user.role)}>{roleLabel(user.role)}</span></td>
+                    <td>{user.baseName || "All Bases"}</td>
+                    <td><span className={`badge ${user.active ? "text-bg-success" : "text-bg-secondary"}`}>{user.active ? "Active" : "Inactive"}</span></td>
+                    <td className="text-end"><button className="btn btn-sm btn-outline-light" onClick={() => setSelectedUser(user)}><i className="bi bi-eye me-1"></i>View</button></td>
+                  </tr>
+                ))}
+          </tbody>
+        </table></div>
       </div>
 
-      {/* Add User Modal */}
       {showModal && (
-        <div
-          className="modal d-block"
-          tabIndex="-1"
-          style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
-        >
-
-          <div className="modal-dialog modal-lg modal-dialog-centered">
-
-            <div className="modal-content bg-dark text-light border-secondary">
-
-              <div className="modal-header border-secondary">
-
-                <div>
-                  <h5 className="modal-title fw-bold">
-                    <i className="bi bi-person-plus me-2"></i>
-                    Add User
-                  </h5>
-
-                  <small className="text-secondary">
-                    Create a new system account
-                  </small>
-                </div>
-
-                <button
-                  className="btn-close btn-close-white"
-                  onClick={() => setShowModal(false)}
-                ></button>
-
+        <div className="modal d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.7)" }}>
+          <div className="modal-dialog modal-lg modal-dialog-centered"><div className="modal-content bg-dark text-light border-secondary">
+            <form onSubmit={handleSubmit}>
+              <div className="modal-header border-secondary"><div><h5 className="modal-title">Add User</h5><small className="text-secondary">Create a system account</small></div>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowModal(false)} disabled={submitting}></button>
               </div>
-
-              <div className="modal-body">
-
-                <div className="row g-3">
-
-                  <div className="col-md-6">
-
-                    <label className="form-label">
-                      Full Name
-                    </label>
-
-                    <input
-                      type="text"
-                      className="form-control bg-dark text-light border-secondary"
-                      placeholder="Enter full name"
-                    />
-
-                  </div>
-
-                  <div className="col-md-6">
-
-                    <label className="form-label">
-                      Email
-                    </label>
-
-                    <input
-                      type="email"
-                      className="form-control bg-dark text-light border-secondary"
-                      placeholder="Enter email"
-                    />
-
-                  </div>
-
-                  <div className="col-md-6">
-
-                    <label className="form-label">
-                      Role
-                    </label>
-
-                    <select className="form-select bg-dark text-light border-secondary">
-                      <option>Select Role</option>
-                      <option>Admin</option>
-                      <option>Base Commander</option>
-                      <option>Logistics Officer</option>
-                    </select>
-
-                  </div>
-
-                  <div className="col-md-6">
-
-                    <label className="form-label">
-                      Assigned Base
-                    </label>
-
-                    <select className="form-select bg-dark text-light border-secondary">
-                      <option>Select Base</option>
-                      <option>All Bases</option>
-                      <option>Base Alpha</option>
-                      <option>Base Bravo</option>
-                      <option>Base Charlie</option>
-                    </select>
-
-                  </div>
-
-                  <div className="col-md-6">
-
-                    <label className="form-label">
-                      Temporary Password
-                    </label>
-
-                    <input
-                      type="password"
-                      className="form-control bg-dark text-light border-secondary"
-                      placeholder="Set temporary password"
-                    />
-
-                  </div>
-
-                  <div className="col-md-6">
-
-                    <label className="form-label">
-                      Account Status
-                    </label>
-
-                    <select className="form-select bg-dark text-light border-secondary">
-                      <option>Active</option>
-                      <option>Inactive</option>
-                    </select>
-
-                  </div>
-
+              <div className="modal-body"><div className="row g-3">
+                <div className="col-md-6"><label className="form-label">Full Name</label><input className="form-control bg-dark text-light border-secondary" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></div>
+                <div className="col-md-6"><label className="form-label">Email</label><input type="email" className="form-control bg-dark text-light border-secondary" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} required /></div>
+                <div className="col-md-6"><label className="form-label">Role</label>
+                  <select className="form-select bg-dark text-light border-secondary" value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))} required>
+                    <option value="">Select role</option>{roles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
+                  </select>
                 </div>
-
-                <div className="alert alert-warning mt-4 mb-0">
-                  <i className="bi bi-shield-exclamation me-2"></i>
-
-                  Role and base restrictions must also be enforced by
-                  the backend. Frontend controls alone are not security.
+                <div className="col-md-6"><label className="form-label">Assigned Base</label>
+                  <select className="form-select bg-dark text-light border-secondary" value={form.baseId} onChange={(event) => setForm((current) => ({ ...current, baseId: event.target.value }))}>
+                    <option value="">No base assigned</option>{bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
+                  </select>
                 </div>
-
-              </div>
-
+                <div className="col-md-6"><label className="form-label">Temporary Password</label><input type="password" className="form-control bg-dark text-light border-secondary" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} required /></div>
+                <div className="col-md-6"><label className="form-label">Account Status</label>
+                  <select className="form-select bg-dark text-light border-secondary" value={String(form.active)} onChange={(event) => setForm((current) => ({ ...current, active: event.target.value === "true" }))}>
+                    <option value="true">Active</option><option value="false">Inactive</option>
+                  </select>
+                </div>
+              </div></div>
               <div className="modal-footer border-secondary">
-
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-
-                <button className="btn btn-primary">
-                  <i className="bi bi-person-plus me-2"></i>
-                  Create User
-                </button>
-
+                <button type="button" className="btn btn-outline-secondary" onClick={() => setShowModal(false)} disabled={submitting}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? "Creating..." : "Create User"}</button>
               </div>
-
-            </div>
-
-          </div>
-
+            </form>
+          </div></div>
         </div>
       )}
 
-      {/* User Details Modal */}
       {selectedUser && (
-        <div
-          className="modal d-block"
-          tabIndex="-1"
-          style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
-        >
-
-          <div className="modal-dialog modal-dialog-centered">
-
-            <div className="modal-content bg-dark text-light border-secondary">
-
-              <div className="modal-header border-secondary">
-
-                <h5 className="modal-title">
-                  User Details
-                </h5>
-
-                <button
-                  className="btn-close btn-close-white"
-                  onClick={() => setSelectedUser(null)}
-                ></button>
-
-              </div>
-
-              <div className="modal-body">
-
-                <div className="row g-3">
-
-                  <div className="col-12">
-                    <small className="text-secondary">
-                      User ID
-                    </small>
-
-                    <div className="fw-semibold">
-                      {selectedUser.id}
-                    </div>
-                  </div>
-
-                  <div className="col-12">
-                    <small className="text-secondary">
-                      Name
-                    </small>
-
-                    <div>
-                      {selectedUser.name}
-                    </div>
-                  </div>
-
-                  <div className="col-12">
-                    <small className="text-secondary">
-                      Email
-                    </small>
-
-                    <div>
-                      {selectedUser.email}
-                    </div>
-                  </div>
-
-                  <div className="col-6">
-                    <small className="text-secondary">
-                      Role
-                    </small>
-
-                    <div className="mt-1">
-                      <span className={roleBadge(selectedUser.role)}>
-                        {selectedUser.role}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="col-6">
-                    <small className="text-secondary">
-                      Status
-                    </small>
-
-                    <div className="mt-1">
-                      <span
-                        className={
-                          selectedUser.status === "Active"
-                            ? "badge text-bg-success"
-                            : "badge text-bg-secondary"
-                        }
-                      >
-                        {selectedUser.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="col-12">
-                    <small className="text-secondary">
-                      Assigned Base
-                    </small>
-
-                    <div>
-                      {selectedUser.base}
-                    </div>
-                  </div>
-
-                  <div className="col-12">
-                    <small className="text-secondary">
-                      Last Login
-                    </small>
-
-                    <div>
-                      {selectedUser.lastLogin}
-                    </div>
-                  </div>
-
-                </div>
-
-              </div>
-
-              <div className="modal-footer border-secondary">
-
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setSelectedUser(null)}
-                >
-                  Close
-                </button>
-
-              </div>
-
-            </div>
-
-          </div>
-
+        <div className="modal d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.7)" }}>
+          <div className="modal-dialog modal-dialog-centered"><div className="modal-content bg-dark text-light border-secondary">
+            <div className="modal-header border-secondary"><h5 className="modal-title">User Details</h5><button className="btn-close btn-close-white" onClick={() => setSelectedUser(null)}></button></div>
+            <div className="modal-body"><dl className="row mb-0">
+              <dt className="col-5">User ID</dt><dd className="col-7">{selectedUser.id}</dd>
+              <dt className="col-5">Name</dt><dd className="col-7">{selectedUser.name}</dd>
+              <dt className="col-5">Email</dt><dd className="col-7">{selectedUser.email}</dd>
+              <dt className="col-5">Role</dt><dd className="col-7">{roleLabel(selectedUser.role)}</dd>
+              <dt className="col-5">Status</dt><dd className="col-7">{selectedUser.active ? "Active" : "Inactive"}</dd>
+              <dt className="col-5">Assigned Base</dt><dd className="col-7">{selectedUser.baseName || "All Bases"}</dd>
+            </dl></div>
+            <div className="modal-footer border-secondary"><button className="btn btn-secondary" onClick={() => setSelectedUser(null)}>Close</button></div>
+          </div></div>
         </div>
       )}
-
     </div>
   );
 }

@@ -6,6 +6,7 @@ import com.mams.military_asset_management.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
@@ -14,23 +15,26 @@ public class DataInitializer {
     @Bean
     CommandLineRunner initializeAdmin(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder
-    ) {
+            PasswordEncoder passwordEncoder,
+            @Value("${app.bootstrap-admin.name:}") String adminName,
+            @Value("${app.bootstrap-admin.email:}") String adminEmail,
+            @Value("${app.bootstrap-admin.password:}") String adminPassword) {
 
         return args -> {
 
-            String adminEmail = "admin@mams.com";
+            if (adminName.isBlank() || adminEmail.isBlank() || adminPassword.isBlank()) {
+                return;
+            }
 
             if (!userRepository.existsByEmail(adminEmail)) {
 
                 User admin = new User();
 
-                admin.setName("System Administrator");
+                admin.setName(adminName);
                 admin.setEmail(adminEmail);
 
                 admin.setPassword(
-                        passwordEncoder.encode("Admin@123")
-                );
+                        passwordEncoder.encode(adminPassword));
 
                 admin.setRole(Role.ADMIN);
                 admin.setActive(true);
@@ -38,9 +42,8 @@ public class DataInitializer {
                 userRepository.save(admin);
 
                 System.out.println(
-                        "Default admin user created: "
-                                + adminEmail
-                );
+                        "Configured bootstrap administrator created: "
+                                + adminEmail);
             }
         };
     }

@@ -1,648 +1,315 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import apiRequest from "../services/api";
+import { getCurrentUser, isBaseScoped } from "../services/roleAccess";
+
+const today = () => new Date().toISOString().split("T")[0];
+
+const emptyForm = {
+  fromBaseId: "",
+  toBaseId: "",
+  equipmentTypeId: "",
+  quantity: "",
+  transferDate: today(),
+  referenceNumber: "",
+  remarks: "",
+};
+
+const emptyFilters = {
+  startDate: "",
+  endDate: "",
+  baseId: "",
+  equipmentTypeId: "",
+};
 
 function Transfers() {
+  const user = getCurrentUser();
+  const baseScoped = isBaseScoped(user);
+  const assignedBaseId = user.baseId == null ? "" : String(user.baseId);
+  const [transfers, setTransfers] = useState([]);
+  const [bases, setBases] = useState([]);
+  const [equipmentTypes, setEquipmentTypes] = useState([]);
+  const [filters, setFilters] = useState({ ...emptyFilters, baseId: baseScoped ? assignedBaseId : "" });
+  const [form, setForm] = useState({ ...emptyForm, fromBaseId: baseScoped ? assignedBaseId : "" });
+  const [direction, setDirection] = useState("OUTGOING");
+  const [selectedTransfer, setSelectedTransfer] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const transfers = [
-    {
-      id: "TRF-00125",
-      date: "29 Sep 2026",
-      from: "Base Alpha",
-      to: "Base Bravo",
-      equipment: "Rifle",
-      quantity: 80,
-      reference: "TR-2026-0915",
-      status: "Completed",
-    },
-    {
-      id: "TRF-00124",
-      date: "28 Sep 2026",
-      from: "Base Charlie",
-      to: "Base Alpha",
-      equipment: "Ammunition",
-      quantity: 300,
-      reference: "TR-2026-0911",
-      status: "Completed",
-    },
-    {
-      id: "TRF-00123",
-      date: "26 Sep 2026",
-      from: "Base Bravo",
-      to: "Base Charlie",
-      equipment: "Helmet",
-      quantity: 100,
-      reference: "TR-2026-0903",
-      status: "Completed",
-    },
-    {
-      id: "TRF-00122",
-      date: "24 Sep 2026",
-      from: "Base Alpha",
-      to: "Base Charlie",
-      equipment: "Rifle",
-      quantity: 50,
-      reference: "TR-2026-0889",
-      status: "Completed",
-    },
-    {
-      id: "TRF-00121",
-      date: "22 Sep 2026",
-      from: "Base Bravo",
-      to: "Base Alpha",
-      equipment: "Ammunition",
-      quantity: 250,
-      reference: "TR-2026-0872",
-      status: "Completed",
-    },
-  ];
+  useEffect(() => {
+    Promise.all([apiRequest("/bases"), apiRequest("/equipment-types")])
+      .then(([baseData, equipmentData]) => {
+        setBases(baseData);
+        setEquipmentTypes(equipmentData);
+      })
+      .catch((requestError) => setError(requestError.message));
+  }, []);
+
+  useEffect(() => {
+    const loadTransfers = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const params = new URLSearchParams();
+        params.set("startDate", filters.startDate || "1970-01-01");
+        params.set("endDate", filters.endDate || today());
+        if (filters.baseId) params.set("baseId", filters.baseId);
+        if (filters.equipmentTypeId) params.set("equipmentTypeId", filters.equipmentTypeId);
+
+        const data = await apiRequest(`/transfers?${params.toString()}`);
+        setTransfers(Array.isArray(data) ? data : []);
+      } catch (requestError) {
+        setError(requestError.message);
+        setTransfers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTransfers();
+  }, [filters.startDate, filters.endDate, filters.baseId, filters.equipmentTypeId, refreshToken]);
+
+  const totalQuantity = useMemo(
+    () => transfers.reduce((total, transfer) => total + Number(transfer.quantity || 0), 0),
+    [transfers]
+  );
+  const routeCount = useMemo(
+    () => new Set(transfers.map((transfer) => `${transfer.fromBaseId}-${transfer.toBaseId}`)).size,
+    [transfers]
+  );
+  const sourceBases = bases.filter((base) => !baseScoped || (
+    direction === "INCOMING"
+      ? String(base.id) !== assignedBaseId
+      : String(base.id) === assignedBaseId
+  ));
+  const destinationBases = bases.filter((base) => !baseScoped || (
+    direction === "INCOMING"
+      ? String(base.id) === assignedBaseId
+      : String(base.id) !== assignedBaseId
+  ));
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (form.fromBaseId === form.toBaseId) {
+      setError("Source and destination bases must be different.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await apiRequest("/transfers", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          fromBaseId: Number(form.fromBaseId),
+          toBaseId: Number(form.toBaseId),
+          equipmentTypeId: Number(form.equipmentTypeId),
+          quantity: Number(form.quantity),
+          referenceNumber: form.referenceNumber.trim() || null,
+          remarks: form.remarks.trim() || null,
+        }),
+      });
+      setShowModal(false);
+      setForm({ ...emptyForm, fromBaseId: baseScoped ? assignedBaseId : "", transferDate: today() });
+      setSuccess("Transfer recorded successfully.");
+      setRefreshToken((current) => current + 1);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div className="container-fluid px-0">
-
-      {/* Header */}
+    <div className="container-fluid px-0 py-4">
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
-
         <div>
-          <h3 className="text-white fw-bold mb-1">
-            Transfers
-          </h3>
-
-          <p className="text-secondary mb-0">
-            Manage asset movements between military bases.
-          </p>
+          <h3 className="text-white fw-bold mb-1">Transfers</h3>
+          <p className="text-secondary mb-0">Manage asset movements between military bases.</p>
         </div>
-
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowModal(true)}
-        >
-          <i className="bi bi-arrow-left-right me-2"></i>
-          New Transfer
+        <button className="btn btn-primary" onClick={() => { setError(""); setDirection("OUTGOING"); setForm({ ...emptyForm, fromBaseId: baseScoped ? assignedBaseId : "", toBaseId: "", transferDate: today() }); setShowModal(true); }}>
+          <i className="bi bi-arrow-left-right me-2"></i>New Transfer
         </button>
-
       </div>
 
-      {/* Summary */}
-      <div className="row g-3 mb-4">
-
-        <div className="col-md-4">
-          <div className="card bg-dark border-secondary h-100">
-            <div className="card-body">
-
-              <div className="d-flex justify-content-between align-items-center">
-
-                <div>
-                  <p className="text-secondary small mb-1">
-                    Total Transfers
-                  </p>
-
-                  <h4 className="text-white fw-bold mb-0">
-                    86
-                  </h4>
-                </div>
-
-                <div className="bg-primary bg-opacity-25 text-primary rounded-3 p-3">
-                  <i className="bi bi-arrow-left-right fs-4"></i>
-                </div>
-
-              </div>
-
-            </div>
-          </div>
+      {(error || success) && (
+        <div className={`alert ${error ? "alert-danger" : "alert-success"}`} role="alert">
+          {error || success}
         </div>
-
-        <div className="col-md-4">
-          <div className="card bg-dark border-secondary h-100">
-            <div className="card-body">
-
-              <div className="d-flex justify-content-between align-items-center">
-
-                <div>
-                  <p className="text-secondary small mb-1">
-                    Transfer In
-                  </p>
-
-                  <h4 className="text-success fw-bold mb-0">
-                    +480
-                  </h4>
-                </div>
-
-                <div className="bg-success bg-opacity-25 text-success rounded-3 p-3">
-                  <i className="bi bi-arrow-down-left fs-4"></i>
-                </div>
-
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-        <div className="col-md-4">
-          <div className="card bg-dark border-secondary h-100">
-            <div className="card-body">
-
-              <div className="d-flex justify-content-between align-items-center">
-
-                <div>
-                  <p className="text-secondary small mb-1">
-                    Transfer Out
-                  </p>
-
-                  <h4 className="text-warning fw-bold mb-0">
-                    -320
-                  </h4>
-                </div>
-
-                <div className="bg-warning bg-opacity-25 text-warning rounded-3 p-3">
-                  <i className="bi bi-arrow-up-right fs-4"></i>
-                </div>
-
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Filters */}
-      <div className="card bg-dark border-secondary mb-4">
-
-        <div className="card-header bg-transparent border-secondary">
-          <h6 className="text-white mb-0">
-            <i className="bi bi-funnel me-2"></i>
-            Filters
-          </h6>
-        </div>
-
-        <div className="card-body">
-
-          <div className="row g-3">
-
-            <div className="col-md-3">
-              <label className="form-label text-secondary small">
-                From Date
-              </label>
-
-              <input
-                type="date"
-                className="form-control bg-black text-light border-secondary"
-              />
-            </div>
-
-            <div className="col-md-3">
-              <label className="form-label text-secondary small">
-                To Date
-              </label>
-
-              <input
-                type="date"
-                className="form-control bg-black text-light border-secondary"
-              />
-            </div>
-
-            <div className="col-md-3">
-              <label className="form-label text-secondary small">
-                From Base
-              </label>
-
-              <select className="form-select bg-black text-light border-secondary">
-                <option>All Bases</option>
-                <option>Base Alpha</option>
-                <option>Base Bravo</option>
-                <option>Base Charlie</option>
-              </select>
-            </div>
-
-            <div className="col-md-3">
-              <label className="form-label text-secondary small">
-                Equipment Type
-              </label>
-
-              <select className="form-select bg-black text-light border-secondary">
-                <option>All Equipment</option>
-                <option>Rifle</option>
-                <option>Ammunition</option>
-                <option>Helmet</option>
-                <option>Vehicle</option>
-              </select>
-            </div>
-
-          </div>
-
-          <div className="d-flex justify-content-end gap-2 mt-3">
-
-            <button className="btn btn-outline-secondary">
-              <i className="bi bi-arrow-counterclockwise me-2"></i>
-              Reset
-            </button>
-
-            <button className="btn btn-primary">
-              <i className="bi bi-search me-2"></i>
-              Apply Filters
-            </button>
-
-          </div>
-
-        </div>
-      </div>
-
-      {/* Transfer History */}
-      <div className="card bg-dark border-secondary">
-
-        <div className="card-header bg-transparent border-secondary py-3">
-
-          <div className="d-flex justify-content-between align-items-center">
-
-            <div>
-              <h5 className="text-white mb-1">
-                Transfer History
-              </h5>
-
-              <small className="text-secondary">
-                Complete record of asset movements between bases
-              </small>
-            </div>
-
-            <button className="btn btn-sm btn-outline-secondary">
-              <i className="bi bi-download me-2"></i>
-              Export
-            </button>
-
-          </div>
-
-        </div>
-
-        <div className="card-body p-0">
-
-          <div className="table-responsive">
-
-            <table className="table table-dark table-hover align-middle mb-0">
-
-              <thead>
-                <tr className="text-secondary">
-
-                  <th className="px-4">Transfer ID</th>
-                  <th>Date</th>
-                  <th>From</th>
-                  <th></th>
-                  <th>To</th>
-                  <th>Equipment</th>
-                  <th>Quantity</th>
-                  <th>Reference</th>
-                  <th>Status</th>
-                  <th>Action</th>
-
-                </tr>
-              </thead>
-
-              <tbody>
-
-                {transfers.map((transfer) => (
-
-                  <tr key={transfer.id}>
-
-                    <td className="px-4">
-                      <span className="text-primary fw-semibold">
-                        {transfer.id}
-                      </span>
-                    </td>
-
-                    <td className="text-secondary">
-                      {transfer.date}
-                    </td>
-
-                    <td className="text-white">
-                      {transfer.from}
-                    </td>
-
-                    <td className="text-primary text-center">
-                      <i className="bi bi-arrow-right"></i>
-                    </td>
-
-                    <td className="text-white">
-                      {transfer.to}
-                    </td>
-
-                    <td className="text-white">
-                      {transfer.equipment}
-                    </td>
-
-                    <td className="text-white fw-semibold">
-                      {transfer.quantity}
-                    </td>
-
-                    <td className="text-secondary">
-                      {transfer.reference}
-                    </td>
-
-                    <td>
-                      <span className="badge text-bg-success">
-                        <i className="bi bi-check-circle me-1"></i>
-                        {transfer.status}
-                      </span>
-                    </td>
-
-                    <td>
-                      <button className="btn btn-sm btn-outline-secondary">
-                        <i className="bi bi-eye"></i>
-                      </button>
-                    </td>
-
-                  </tr>
-
-                ))}
-
-              </tbody>
-
-            </table>
-
-          </div>
-
-        </div>
-
-        <div className="card-footer bg-transparent border-secondary">
-
-          <div className="d-flex justify-content-between align-items-center">
-
-            <small className="text-secondary">
-              Showing 1–5 of 86 records
-            </small>
-
-            <nav>
-              <ul className="pagination pagination-sm mb-0">
-
-                <li className="page-item disabled">
-                  <button className="page-link bg-dark text-secondary border-secondary">
-                    Previous
-                  </button>
-                </li>
-
-                <li className="page-item active">
-                  <button className="page-link bg-primary border-primary">
-                    1
-                  </button>
-                </li>
-
-                <li className="page-item">
-                  <button className="page-link bg-dark text-secondary border-secondary">
-                    2
-                  </button>
-                </li>
-
-                <li className="page-item">
-                  <button className="page-link bg-dark text-secondary border-secondary">
-                    3
-                  </button>
-                </li>
-
-                <li className="page-item">
-                  <button className="page-link bg-dark text-secondary border-secondary">
-                    Next
-                  </button>
-                </li>
-
-              </ul>
-            </nav>
-
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* New Transfer Modal */}
-      {showModal && (
-
-        <div
-          className="modal d-block"
-          tabIndex="-1"
-          style={{
-            backgroundColor: "rgba(0,0,0,0.75)",
-          }}
-        >
-
-          <div className="modal-dialog modal-dialog-centered modal-lg">
-
-            <div className="modal-content bg-dark border-secondary">
-
-              <div className="modal-header border-secondary">
-
-                <div>
-                  <h5 className="modal-title text-white">
-                    New Asset Transfer
-                  </h5>
-
-                  <small className="text-secondary">
-                    Transfer assets between bases
-                  </small>
-                </div>
-
-                <button
-                  className="btn-close btn-close-white"
-                  onClick={() => setShowModal(false)}
-                ></button>
-
-              </div>
-
-              <div className="modal-body">
-
-                {/* Source / Destination */}
-                <div className="row g-3">
-
-                  <div className="col-md-5">
-
-                    <label className="form-label text-light">
-                      From Base{" "}
-                      <span className="text-danger">*</span>
-                    </label>
-
-                    <select className="form-select bg-black text-light border-secondary">
-
-                      <option value="">
-                        Select Source Base
-                      </option>
-
-                      <option>
-                        Base Alpha
-                      </option>
-
-                      <option>
-                        Base Bravo
-                      </option>
-
-                      <option>
-                        Base Charlie
-                      </option>
-
-                    </select>
-
-                  </div>
-
-                  <div className="col-md-2 d-flex align-items-end justify-content-center pb-2">
-
-                    <div className="text-primary fs-4">
-                      <i className="bi bi-arrow-right"></i>
-                    </div>
-
-                  </div>
-
-                  <div className="col-md-5">
-
-                    <label className="form-label text-light">
-                      To Base{" "}
-                      <span className="text-danger">*</span>
-                    </label>
-
-                    <select className="form-select bg-black text-light border-secondary">
-
-                      <option value="">
-                        Select Destination Base
-                      </option>
-
-                      <option>
-                        Base Alpha
-                      </option>
-
-                      <option>
-                        Base Bravo
-                      </option>
-
-                      <option>
-                        Base Charlie
-                      </option>
-
-                    </select>
-
-                  </div>
-
-                  {/* Equipment */}
-                  <div className="col-md-6">
-
-                    <label className="form-label text-light">
-                      Equipment Type{" "}
-                      <span className="text-danger">*</span>
-                    </label>
-
-                    <select className="form-select bg-black text-light border-secondary">
-
-                      <option>
-                        Select Equipment
-                      </option>
-
-                      <option>Rifle</option>
-                      <option>Ammunition</option>
-                      <option>Helmet</option>
-                      <option>Vehicle</option>
-
-                    </select>
-
-                  </div>
-
-                  {/* Quantity */}
-                  <div className="col-md-6">
-
-                    <label className="form-label text-light">
-                      Quantity{" "}
-                      <span className="text-danger">*</span>
-                    </label>
-
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-control bg-black text-light border-secondary"
-                      placeholder="Enter quantity"
-                    />
-
-                  </div>
-
-                  {/* Date */}
-                  <div className="col-md-6">
-
-                    <label className="form-label text-light">
-                      Transfer Date{" "}
-                      <span className="text-danger">*</span>
-                    </label>
-
-                    <input
-                      type="date"
-                      className="form-control bg-black text-light border-secondary"
-                    />
-
-                  </div>
-
-                  {/* Reference */}
-                  <div className="col-md-6">
-
-                    <label className="form-label text-light">
-                      Reference Number
-                    </label>
-
-                    <input
-                      type="text"
-                      className="form-control bg-black text-light border-secondary"
-                      placeholder="Enter reference number"
-                    />
-
-                  </div>
-
-                  {/* Remarks */}
-                  <div className="col-12">
-
-                    <label className="form-label text-light">
-                      Remarks
-                    </label>
-
-                    <textarea
-                      className="form-control bg-black text-light border-secondary"
-                      rows="3"
-                      placeholder="Enter transfer remarks..."
-                    ></textarea>
-
-                  </div>
-
-                </div>
-
-                {/* Warning */}
-                <div className="alert alert-warning bg-warning bg-opacity-10 border-warning text-warning mt-4 mb-0">
-
-                  <i className="bi bi-exclamation-triangle me-2"></i>
-
-                  The source base inventory will be reduced and the
-                  destination base inventory will be increased after
-                  this transfer is recorded.
-
-                </div>
-
-              </div>
-
-              <div className="modal-footer border-secondary">
-
-                <button
-                  className="btn btn-outline-secondary"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  className="btn btn-primary"
-                  onClick={() => setShowModal(false)}
-                >
-                  <i className="bi bi-arrow-left-right me-2"></i>
-                  Create Transfer
-                </button>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
       )}
 
+      <div className="row g-3 mb-4">
+        <div className="col-md-4">
+          <div className="card bg-dark border-secondary h-100"><div className="card-body">
+            <p className="text-secondary small mb-1">Transfer Records</p>
+            <h4 className="text-white fw-bold mb-0">{transfers.length.toLocaleString()}</h4>
+          </div></div>
+        </div>
+        <div className="col-md-4">
+          <div className="card bg-dark border-secondary h-100"><div className="card-body">
+            <p className="text-secondary small mb-1">Units Moved</p>
+            <h4 className="text-success fw-bold mb-0">{totalQuantity.toLocaleString()}</h4>
+          </div></div>
+        </div>
+        <div className="col-md-4">
+          <div className="card bg-dark border-secondary h-100"><div className="card-body">
+            <p className="text-secondary small mb-1">Routes Used</p>
+            <h4 className="text-info fw-bold mb-0">{routeCount.toLocaleString()}</h4>
+          </div></div>
+        </div>
+      </div>
+
+      <div className="card bg-dark border-secondary mb-4">
+        <div className="card-header bg-transparent border-secondary"><h6 className="text-white mb-0">Filters</h6></div>
+        <div className="card-body">
+          <div className="row g-3 align-items-end">
+            <div className="col-md-3">
+              <label className="form-label text-secondary small">From Date</label>
+              <input type="date" className="form-control bg-black text-light border-secondary" value={filters.startDate} onChange={(event) => setFilters((current) => ({ ...current, startDate: event.target.value }))} />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label text-secondary small">To Date</label>
+              <input type="date" className="form-control bg-black text-light border-secondary" value={filters.endDate} onChange={(event) => setFilters((current) => ({ ...current, endDate: event.target.value }))} />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label text-secondary small">Base</label>
+              <select className="form-select bg-black text-light border-secondary" value={filters.baseId} disabled={baseScoped} onChange={(event) => setFilters((current) => ({ ...current, baseId: event.target.value }))}>
+                {!baseScoped && <option value="">All Bases</option>}
+                {bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
+              </select>
+            </div>
+            <div className="col-md-2">
+              <label className="form-label text-secondary small">Equipment Type</label>
+              <select className="form-select bg-black text-light border-secondary" value={filters.equipmentTypeId} onChange={(event) => setFilters((current) => ({ ...current, equipmentTypeId: event.target.value }))}>
+                <option value="">All Equipment</option>
+                {equipmentTypes.map((equipment) => <option key={equipment.id} value={equipment.id}>{equipment.name}</option>)}
+              </select>
+            </div>
+            <div className="col-md-2">
+              <button className="btn btn-outline-secondary w-100" onClick={() => setFilters(emptyFilters)}>
+                <i className="bi bi-arrow-counterclockwise me-2"></i>Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card bg-dark border-secondary">
+        <div className="card-header bg-transparent border-secondary d-flex justify-content-between align-items-center">
+          <div><h5 className="text-white mb-1">Transfer History</h5><small className="text-secondary">Recorded movements between bases</small></div>
+          {!loading && <span className="text-secondary small">{transfers.length} records</span>}
+        </div>
+        <div className="table-responsive">
+          <table className="table table-dark table-hover align-middle mb-0">
+            <thead><tr><th className="px-4">Transfer ID</th><th>Date</th><th>From</th><th></th><th>To</th><th>Equipment</th><th>Quantity</th><th>Reference</th><th>Action</th></tr></thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="9" className="text-center py-5">Loading transfers...</td></tr>
+              ) : transfers.length === 0 ? (
+                <tr><td colSpan="9" className="text-center py-5 text-secondary">No transfer records found.</td></tr>
+              ) : transfers.map((transfer) => (
+                <tr key={transfer.id}>
+                  <td className="px-4"><span className="text-primary fw-semibold">TRF-{String(transfer.id).padStart(5, "0")}</span></td>
+                  <td className="text-secondary">{transfer.transferDate}</td>
+                  <td className="text-white">{transfer.fromBaseName}</td>
+                  <td className="text-primary text-center"><i className="bi bi-arrow-right"></i></td>
+                  <td className="text-white">{transfer.toBaseName}</td>
+                  <td className="text-white">{transfer.equipmentTypeName}</td>
+                  <td className="text-white fw-semibold">{Number(transfer.quantity).toLocaleString()}</td>
+                  <td className="text-secondary">{transfer.referenceNumber || "-"}</td>
+                  <td><button className="btn btn-sm btn-outline-secondary" title="View details" onClick={() => setSelectedTransfer(transfer)}><i className="bi bi-eye"></i></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="modal d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.75)" }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg"><div className="modal-content bg-dark text-light border-secondary">
+            <form onSubmit={handleSubmit}>
+              <div className="modal-header border-secondary">
+                <div><h5 className="modal-title">New Asset Transfer</h5><small className="text-secondary">Move inventory between bases</small></div>
+                <button type="button" className="btn-close btn-close-white" onClick={() => setShowModal(false)} disabled={submitting}></button>
+              </div>
+              <div className="modal-body">
+                <div className="row g-3">
+                  {baseScoped && (
+                    <div className="col-12">
+                      <label className="form-label">Transfer direction</label>
+                      <div className="btn-group w-100" role="group" aria-label="Transfer direction">
+                        <button type="button" className={`btn ${direction === "OUTGOING" ? "btn-primary" : "btn-outline-secondary"}`} onClick={() => { setDirection("OUTGOING"); setForm((current) => ({ ...current, fromBaseId: assignedBaseId, toBaseId: "" })); }}>Send from my base</button>
+                        <button type="button" className={`btn ${direction === "INCOMING" ? "btn-primary" : "btn-outline-secondary"}`} onClick={() => { setDirection("INCOMING"); setForm((current) => ({ ...current, fromBaseId: "", toBaseId: assignedBaseId })); }}>Receive to my base</button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="col-md-6"><label className="form-label">From Base</label>
+                    <select className="form-select bg-black text-light border-secondary" value={form.fromBaseId} disabled={baseScoped && direction === "OUTGOING"} onChange={(event) => setForm((current) => ({ ...current, fromBaseId: event.target.value }))} required>
+                      {!(baseScoped && direction === "OUTGOING") && <option value="">Select source base</option>}
+                      {baseScoped && direction === "OUTGOING" && !assignedBaseId && <option value="">No assigned base</option>}
+                      {sourceBases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-md-6"><label className="form-label">To Base</label>
+                    <select className="form-select bg-black text-light border-secondary" value={form.toBaseId} disabled={baseScoped && direction === "INCOMING"} onChange={(event) => setForm((current) => ({ ...current, toBaseId: event.target.value }))} required>
+                      {!(baseScoped && direction === "INCOMING") && <option value="">Select destination base</option>}
+                      {baseScoped && direction === "INCOMING" && !assignedBaseId && <option value="">No assigned base</option>}
+                      {destinationBases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-md-6"><label className="form-label">Equipment Type</label>
+                    <select className="form-select bg-black text-light border-secondary" value={form.equipmentTypeId} onChange={(event) => setForm((current) => ({ ...current, equipmentTypeId: event.target.value }))} required>
+                      <option value="">Select equipment</option>{equipmentTypes.map((equipment) => <option key={equipment.id} value={equipment.id}>{equipment.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-md-6"><label className="form-label">Quantity</label>
+                    <input type="number" min="1" className="form-control bg-black text-light border-secondary" value={form.quantity} onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))} required />
+                  </div>
+                  <div className="col-md-6"><label className="form-label">Transfer Date</label>
+                    <input type="date" className="form-control bg-black text-light border-secondary" value={form.transferDate} onChange={(event) => setForm((current) => ({ ...current, transferDate: event.target.value }))} required />
+                  </div>
+                  <div className="col-md-6"><label className="form-label">Reference Number</label>
+                    <input className="form-control bg-black text-light border-secondary" value={form.referenceNumber} onChange={(event) => setForm((current) => ({ ...current, referenceNumber: event.target.value }))} />
+                  </div>
+                  <div className="col-12"><label className="form-label">Remarks</label>
+                    <textarea className="form-control bg-black text-light border-secondary" rows="3" value={form.remarks} onChange={(event) => setForm((current) => ({ ...current, remarks: event.target.value }))}></textarea>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer border-secondary">
+                <button type="button" className="btn btn-outline-secondary" onClick={() => setShowModal(false)} disabled={submitting}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? "Recording..." : "Create Transfer"}</button>
+              </div>
+            </form>
+          </div></div>
+        </div>
+      )}
+
+      {selectedTransfer && (
+        <div className="modal d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: "rgba(0,0,0,0.75)" }}>
+          <div className="modal-dialog modal-dialog-centered"><div className="modal-content bg-dark text-light border-secondary">
+            <div className="modal-header border-secondary"><h5 className="modal-title">Transfer Details</h5><button className="btn-close btn-close-white" onClick={() => setSelectedTransfer(null)}></button></div>
+            <div className="modal-body"><dl className="row mb-0">
+              <dt className="col-5">Date</dt><dd className="col-7">{selectedTransfer.transferDate}</dd>
+              <dt className="col-5">Route</dt><dd className="col-7">{selectedTransfer.fromBaseName} to {selectedTransfer.toBaseName}</dd>
+              <dt className="col-5">Equipment</dt><dd className="col-7">{selectedTransfer.equipmentTypeName}</dd>
+              <dt className="col-5">Quantity</dt><dd className="col-7">{selectedTransfer.quantity}</dd>
+              <dt className="col-5">Reference</dt><dd className="col-7">{selectedTransfer.referenceNumber || "-"}</dd>
+              <dt className="col-5">Created By</dt><dd className="col-7">{selectedTransfer.createdBy || "-"}</dd>
+              <dt className="col-5">Remarks</dt><dd className="col-7">{selectedTransfer.remarks || "-"}</dd>
+            </dl></div>
+            <div className="modal-footer border-secondary"><button className="btn btn-secondary" onClick={() => setSelectedTransfer(null)}>Close</button></div>
+          </div></div>
+        </div>
+      )}
     </div>
   );
 }

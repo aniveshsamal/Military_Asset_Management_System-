@@ -1,111 +1,110 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  color-scheme: dark;
+  --app-canvas: #0a0f13;
+  --app-border: #38444d;
+  --app-border-hover: #526873;
+  --app-focus: #76d0df;
+  --bs-body-bg: #0a0f13;
+  --bs-body-color: #e9eff2;
+  --bs-emphasis-color: #f7fafb;
+  --bs-secondary-color: #aab8c0;
+  --bs-border-color: #38444d;
+  --bs-info: #59c5d3;
+  --bs-info-rgb: 89, 197, 211;
+  --bs-success: #58cf99;
+  --bs-success-rgb: 88, 207, 153;
+  --bs-warning: #f2c064;
+  --bs-warning-rgb: 242, 192, 100;
+  --bs-danger: #f27b7d;
+  --bs-danger-rgb: 242, 123, 125;
+  --bs-dark-rgb: 20, 29, 36;
+  --bs-black-rgb: 8, 13, 17;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
 }
 
 body {
+  min-width: 320px;
+  min-height: 100vh;
   margin: 0;
+  background-color: var(--app-canvas);
+}
+
+.min-vh-100.bg-black {
+  background-image:
+    linear-gradient(rgba(112, 177, 190, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(112, 177, 190, 0.035) 1px, transparent 1px);
+  background-size: 36px 36px;
+  background-attachment: fixed;
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+  min-height: 100vh;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+main {
+  min-width: 0;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+.card {
+  --bs-card-border-radius: 0.5rem;
+  border-color: var(--app-border);
+  transition: border-color 160ms ease;
+}
+
+.card:hover {
+  border-color: var(--app-border-hover);
+}
+
+.container-fluid > .d-flex h3 > .bi,
+.container-fluid > div > .d-flex h3 > .bi {
+  color: var(--bs-info);
+}
+
+.table > :not(caption) > * > * {
+  border-color: rgba(255, 255, 255, 0.09);
+}
+
+.table thead th {
+  color: #9edce4;
+  font-weight: 600;
+}
+
+.btn,
+.form-control,
+.form-select {
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--app-focus);
+  box-shadow: 0 0 0 0.2rem rgba(115, 198, 223, 0.18);
+}
+
+:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  color: #fff;
+  background: #246c86;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
 }

@@ -1,64 +1,129 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import apiRequest from "../services/api";
+import { getCurrentUser, isBaseScoped } from "../services/roleAccess";
+
+const emptyForm = {
+  baseId: "",
+  equipmentTypeId: "",
+  personnelName: "",
+  quantity: "",
+  assignmentDate: new Date().toISOString().split("T")[0],
+  remarks: "",
+};
 
 function Assignments() {
+  const user = getCurrentUser();
+  const baseScoped = isBaseScoped(user);
+  const assignedBaseId = user.baseId == null ? "" : String(user.baseId);
   const [showModal, setShowModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [bases, setBases] = useState([]);
+  const [equipmentTypes, setEquipmentTypes] = useState([]);
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    baseId: baseScoped ? assignedBaseId : "",
+    equipmentTypeId: "",
+    status: "",
+  });
+  const [form, setForm] = useState({ ...emptyForm, baseId: baseScoped ? assignedBaseId : "" });
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const assignments = [
-    {
-      id: "ASN-1001",
-      date: "2026-09-28",
-      personnel: "Rahul Sharma",
-      serviceNo: "MIL-20451",
-      base: "Base Alpha",
-      equipment: "5.56mm Rifle",
-      quantity: 1,
-      status: "Active",
-    },
-    {
-      id: "ASN-1002",
-      date: "2026-09-27",
-      personnel: "Amit Kumar",
-      serviceNo: "MIL-19872",
-      base: "Base Bravo",
-      equipment: "Radio Set",
-      quantity: 2,
-      status: "Active",
-    },
-    {
-      id: "ASN-1003",
-      date: "2026-09-25",
-      personnel: "Vikram Singh",
-      serviceNo: "MIL-18742",
-      base: "Base Alpha",
-      equipment: "Night Vision Device",
-      quantity: 1,
-      status: "Active",
-    },
-    {
-      id: "ASN-1004",
-      date: "2026-09-22",
-      personnel: "Arjun Das",
-      serviceNo: "MIL-17631",
-      base: "Base Charlie",
-      equipment: "Field Laptop",
-      quantity: 1,
-      status: "Returned",
-    },
-    {
-      id: "ASN-1005",
-      date: "2026-09-20",
-      personnel: "Rohit Verma",
-      serviceNo: "MIL-16529",
-      base: "Base Bravo",
-      equipment: "Radio Set",
-      quantity: 1,
-      status: "Active",
-    },
-  ];
+  useEffect(() => {
+    Promise.all([apiRequest("/bases"), apiRequest("/equipment-types")])
+      .then(([baseData, equipmentData]) => {
+        setBases(baseData);
+        setEquipmentTypes(equipmentData);
+      })
+      .catch((requestError) => setError(requestError.message));
+  }, []);
+
+  useEffect(() => {
+    const loadAssignments = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const params = new URLSearchParams();
+        params.set("startDate", filters.startDate || "1970-01-01");
+        params.set("endDate", filters.endDate || new Date().toISOString().split("T")[0]);
+
+        if (filters.baseId) params.set("baseId", filters.baseId);
+        if (filters.equipmentTypeId) params.set("equipmentTypeId", filters.equipmentTypeId);
+
+        const data = await apiRequest(`/assignments?${params.toString()}`);
+        setAssignments(Array.isArray(data) ? data : []);
+      } catch (requestError) {
+        setError(requestError.message);
+        setAssignments([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAssignments();
+  }, [filters.startDate, filters.endDate, filters.baseId, filters.equipmentTypeId, refreshToken]);
+
+  const visibleAssignments = useMemo(
+    () => assignments.filter((assignment) => !filters.status || assignment.status === filters.status),
+    [assignments, filters.status]
+  );
+  const activeCount = assignments.filter((assignment) => assignment.status === "ACTIVE").length;
+  const returnedCount = assignments.filter((assignment) => assignment.status === "RETURNED").length;
+  const personnelCount = new Set(assignments.map((assignment) => assignment.personnelName)).size;
 
   const openDetails = (assignment) => {
     setSelectedAssignment(assignment);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+
+    try {
+      await apiRequest("/assignments", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          baseId: Number(form.baseId),
+          equipmentTypeId: Number(form.equipmentTypeId),
+          quantity: Number(form.quantity),
+        }),
+      });
+      setShowModal(false);
+      setForm({ ...emptyForm, baseId: baseScoped ? assignedBaseId : "" });
+      setSuccess("Assignment recorded successfully.");
+      setRefreshToken((current) => current + 1);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReturn = async (assignmentId) => {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiRequest(`/assignments/${assignmentId}/return`, { method: "PUT" });
+      setAssignments((current) => current.map((assignment) => (
+        assignment.id === assignmentId
+          ? { ...assignment, status: "RETURNED" }
+          : assignment
+      )));
+        setRefreshToken((current) => current + 1);
+      setSuccess("Assignment returned successfully.");
+    } catch (requestError) {
+      setError(requestError.message);
+    }
   };
 
   return (
@@ -68,7 +133,7 @@ function Assignments() {
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
 
         <div>
-          <h3 className="fw-bold mb-1">
+          <h3 className="text-white fw-bold mb-1">
             <i className="bi bi-person-check me-2"></i>
             Assignments
           </h3>
@@ -80,13 +145,22 @@ function Assignments() {
 
         <button
           className="btn btn-primary"
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            setForm({ ...emptyForm, baseId: baseScoped ? assignedBaseId : "" });
+            setShowModal(true);
+          }}
         >
           <i className="bi bi-plus-lg me-2"></i>
           Assign Asset
         </button>
 
       </div>
+
+      {(error || success) && (
+        <div className={`alert ${error ? "alert-danger" : "alert-success"}`} role="alert">
+          {error || success}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="row g-3 mb-4">
@@ -99,7 +173,7 @@ function Assignments() {
                   <small className="text-secondary">
                     Total Assignments
                   </small>
-                  <h3 className="fw-bold mt-2 mb-0">248</h3>
+                  <h3 className="fw-bold mt-2 mb-0 text-white">{assignments.length}</h3>
                 </div>
 
                 <div className="text-primary fs-3">
@@ -118,7 +192,7 @@ function Assignments() {
                   <small className="text-secondary">
                     Active Assignments
                   </small>
-                  <h3 className="fw-bold mt-2 mb-0">214</h3>
+                  <h3 className="fw-bold mt-2 mb-0 text-white">{activeCount}</h3>
                 </div>
 
                 <div className="text-success fs-3">
@@ -137,7 +211,7 @@ function Assignments() {
                   <small className="text-secondary">
                     Returned
                   </small>
-                  <h3 className="fw-bold mt-2 mb-0">34</h3>
+                  <h3 className="fw-bold mt-2 mb-0 text-white">{returnedCount}</h3>
                 </div>
 
                 <div className="text-warning fs-3">
@@ -156,7 +230,7 @@ function Assignments() {
                   <small className="text-secondary">
                     Personnel
                   </small>
-                  <h3 className="fw-bold mt-2 mb-0">192</h3>
+                  <h3 className="fw-bold mt-2 mb-0 text-white">{personnelCount}</h3>
                 </div>
 
                 <div className="text-info fs-3">
@@ -172,56 +246,61 @@ function Assignments() {
       {/* Filters */}
       <div className="card bg-dark border-secondary mb-4">
         <div className="card-body">
-
           <div className="row g-3">
-
             <div className="col-12 col-md-3">
-              <label className="form-label text-secondary">
-                From Date
-              </label>
+              <label className="form-label text-secondary">From Date</label>
               <input
                 type="date"
                 className="form-control bg-dark text-light border-secondary"
+                value={filters.startDate}
+                onChange={(event) => setFilters((current) => ({ ...current, startDate: event.target.value }))}
               />
             </div>
-
             <div className="col-12 col-md-3">
-              <label className="form-label text-secondary">
-                To Date
-              </label>
+              <label className="form-label text-secondary">To Date</label>
               <input
                 type="date"
                 className="form-control bg-dark text-light border-secondary"
+                value={filters.endDate}
+                onChange={(event) => setFilters((current) => ({ ...current, endDate: event.target.value }))}
               />
             </div>
-
             <div className="col-12 col-md-3">
-              <label className="form-label text-secondary">
-                Base
-              </label>
-
-              <select className="form-select bg-dark text-light border-secondary">
-                <option>All Bases</option>
-                <option>Base Alpha</option>
-                <option>Base Bravo</option>
-                <option>Base Charlie</option>
+              <label className="form-label text-secondary">Base</label>
+              <select
+                className="form-select bg-dark text-light border-secondary"
+                value={filters.baseId}
+                disabled={baseScoped}
+                onChange={(event) => setFilters((current) => ({ ...current, baseId: event.target.value }))}
+              >
+                {!baseScoped && <option value="">All Bases</option>}
+                {bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
               </select>
             </div>
-
             <div className="col-12 col-md-3">
-              <label className="form-label text-secondary">
-                Status
-              </label>
-
-              <select className="form-select bg-dark text-light border-secondary">
-                <option>All Status</option>
-                <option>Active</option>
-                <option>Returned</option>
+              <label className="form-label text-secondary">Equipment Type</label>
+              <select
+                className="form-select bg-dark text-light border-secondary"
+                value={filters.equipmentTypeId}
+                onChange={(event) => setFilters((current) => ({ ...current, equipmentTypeId: event.target.value }))}
+              >
+                <option value="">All Equipment</option>
+                {equipmentTypes.map((equipment) => <option key={equipment.id} value={equipment.id}>{equipment.name}</option>)}
               </select>
             </div>
-
+            <div className="col-12 col-md-3">
+              <label className="form-label text-secondary">Status</label>
+              <select
+                className="form-select bg-dark text-light border-secondary"
+                value={filters.status}
+                onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
+              >
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="RETURNED">Returned</option>
+              </select>
+            </div>
           </div>
-
         </div>
       </div>
 
@@ -266,34 +345,34 @@ function Assignments() {
 
             <tbody>
 
-              {assignments.map((assignment) => (
+              {loading ? (
+                <tr><td colSpan="8" className="text-center py-4">Loading assignments...</td></tr>
+              ) : visibleAssignments.length === 0 ? (
+                <tr><td colSpan="8" className="text-center py-4 text-secondary">No assignments found.</td></tr>
+              ) : visibleAssignments.map((assignment) => (
 
                 <tr key={assignment.id}>
 
                   <td className="fw-semibold">
-                    {assignment.id}
+                    ASN-{String(assignment.id).padStart(5, "0")}
                   </td>
 
                   <td>
-                    {assignment.date}
+                    {assignment.assignmentDate}
                   </td>
 
                   <td>
                     <div className="fw-semibold">
-                      {assignment.personnel}
+                      {assignment.personnelName}
                     </div>
-
-                    <small className="text-secondary">
-                      {assignment.serviceNo}
-                    </small>
                   </td>
 
                   <td>
-                    {assignment.base}
+                    {assignment.baseName}
                   </td>
 
                   <td>
-                    {assignment.equipment}
+                    {assignment.equipmentTypeName}
                   </td>
 
                   <td>
@@ -302,7 +381,7 @@ function Assignments() {
 
                   <td>
 
-                    {assignment.status === "Active" ? (
+                    {assignment.status === "ACTIVE" ? (
                       <span className="badge text-bg-success">
                         Active
                       </span>
@@ -323,6 +402,14 @@ function Assignments() {
                       <i className="bi bi-eye me-1"></i>
                       View
                     </button>
+                    {assignment.status === "ACTIVE" && (
+                      <button
+                        className="btn btn-sm btn-outline-warning ms-2"
+                        onClick={() => handleReturn(assignment.id)}
+                      >
+                        Return
+                      </button>
+                    )}
 
                   </td>
 
@@ -342,30 +429,8 @@ function Assignments() {
           <div className="d-flex justify-content-between align-items-center">
 
             <small className="text-secondary">
-              Showing 1–5 of 248 assignments
+              {loading ? "Loading records..." : `${visibleAssignments.length} assignment${visibleAssignments.length === 1 ? "" : "s"}`}
             </small>
-
-            <div className="btn-group btn-group-sm">
-              <button className="btn btn-outline-secondary">
-                Previous
-              </button>
-
-              <button className="btn btn-primary">
-                1
-              </button>
-
-              <button className="btn btn-outline-secondary">
-                2
-              </button>
-
-              <button className="btn btn-outline-secondary">
-                3
-              </button>
-
-              <button className="btn btn-outline-secondary">
-                Next
-              </button>
-            </div>
 
           </div>
 
@@ -421,11 +486,15 @@ function Assignments() {
                       Base
                     </label>
 
-                    <select className="form-select bg-dark text-light border-secondary">
-                      <option>Select Base</option>
-                      <option>Base Alpha</option>
-                      <option>Base Bravo</option>
-                      <option>Base Charlie</option>
+                    <select
+                      className="form-select bg-dark text-light border-secondary"
+                      value={form.baseId}
+                      disabled={baseScoped}
+                      onChange={(event) => setForm((current) => ({ ...current, baseId: event.target.value }))}
+                      required
+                    >
+                      {!baseScoped && <option value="">Select Base</option>}
+                      {bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
                     </select>
 
                   </div>
@@ -436,26 +505,13 @@ function Assignments() {
                       Personnel
                     </label>
 
-                    <select className="form-select bg-dark text-light border-secondary">
-                      <option>Select Personnel</option>
-                      <option>Rahul Sharma</option>
-                      <option>Amit Kumar</option>
-                      <option>Vikram Singh</option>
-                      <option>Arjun Das</option>
-                    </select>
-
-                  </div>
-
-                  <div className="col-md-6">
-
-                    <label className="form-label">
-                      Service Number
-                    </label>
-
                     <input
                       type="text"
                       className="form-control bg-dark text-light border-secondary"
-                      placeholder="MIL-XXXXX"
+                      placeholder="Enter personnel name"
+                      value={form.personnelName}
+                      onChange={(event) => setForm((current) => ({ ...current, personnelName: event.target.value }))}
+                      required
                     />
 
                   </div>
@@ -466,17 +522,19 @@ function Assignments() {
                       Equipment Type
                     </label>
 
-                    <select className="form-select bg-dark text-light border-secondary">
-                      <option>Select Equipment</option>
-                      <option>5.56mm Rifle</option>
-                      <option>Radio Set</option>
-                      <option>Night Vision Device</option>
-                      <option>Field Laptop</option>
+                    <select
+                      className="form-select bg-dark text-light border-secondary"
+                      value={form.equipmentTypeId}
+                      onChange={(event) => setForm((current) => ({ ...current, equipmentTypeId: event.target.value }))}
+                      required
+                    >
+                      <option value="">Select Equipment</option>
+                      {equipmentTypes.map((equipment) => <option key={equipment.id} value={equipment.id}>{equipment.name}</option>)}
                     </select>
 
                   </div>
 
-                  <div className="col-md-4">
+                  <div className="col-md-6">
 
                     <label className="form-label">
                       Quantity
@@ -486,12 +544,15 @@ function Assignments() {
                       type="number"
                       min="1"
                       className="form-control bg-dark text-light border-secondary"
-                      placeholder="1"
+                      placeholder="Enter quantity"
+                      value={form.quantity}
+                      onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
+                      required
                     />
 
                   </div>
 
-                  <div className="col-md-4">
+                  <div className="col-md-6">
 
                     <label className="form-label">
                       Assignment Date
@@ -500,20 +561,8 @@ function Assignments() {
                     <input
                       type="date"
                       className="form-control bg-dark text-light border-secondary"
-                    />
-
-                  </div>
-
-                  <div className="col-md-4">
-
-                    <label className="form-label">
-                      Reference Number
-                    </label>
-
-                    <input
-                      type="text"
-                      className="form-control bg-dark text-light border-secondary"
-                      placeholder="Optional"
+                      value={form.assignmentDate}
+                      onChange={(event) => setForm((current) => ({ ...current, assignmentDate: event.target.value }))}
                     />
 
                   </div>
@@ -528,6 +577,8 @@ function Assignments() {
                       rows="3"
                       className="form-control bg-dark text-light border-secondary"
                       placeholder="Additional remarks..."
+                      value={form.remarks}
+                      onChange={(event) => setForm((current) => ({ ...current, remarks: event.target.value }))}
                     ></textarea>
 
                   </div>
@@ -545,9 +596,9 @@ function Assignments() {
                   Cancel
                 </button>
 
-                <button className="btn btn-primary">
+                <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
                   <i className="bi bi-check-lg me-2"></i>
-                  Assign Asset
+                  {submitting ? "Saving..." : "Assign Asset"}
                 </button>
 
               </div>
@@ -602,7 +653,7 @@ function Assignments() {
                       Date
                     </small>
                     <div>
-                      {selectedAssignment.date}
+                      {selectedAssignment.assignmentDate}
                     </div>
                   </div>
 
@@ -611,16 +662,7 @@ function Assignments() {
                       Personnel
                     </small>
                     <div>
-                      {selectedAssignment.personnel}
-                    </div>
-                  </div>
-
-                  <div className="col-6">
-                    <small className="text-secondary">
-                      Service Number
-                    </small>
-                    <div>
-                      {selectedAssignment.serviceNo}
+                      {selectedAssignment.personnelName}
                     </div>
                   </div>
 
@@ -629,7 +671,7 @@ function Assignments() {
                       Base
                     </small>
                     <div>
-                      {selectedAssignment.base}
+                      {selectedAssignment.baseName}
                     </div>
                   </div>
 
@@ -638,7 +680,7 @@ function Assignments() {
                       Equipment
                     </small>
                     <div>
-                      {selectedAssignment.equipment}
+                      {selectedAssignment.equipmentTypeName}
                     </div>
                   </div>
 
@@ -656,8 +698,8 @@ function Assignments() {
                       Status
                     </small>
                     <div>
-                      <span className="badge text-bg-success">
-                        {selectedAssignment.status}
+                      <span className={`badge ${selectedAssignment.status === "ACTIVE" ? "text-bg-success" : "text-bg-secondary"}`}>
+                        {selectedAssignment.status === "ACTIVE" ? "Active" : "Returned"}
                       </span>
                     </div>
                   </div>

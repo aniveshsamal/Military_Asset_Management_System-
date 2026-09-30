@@ -9,6 +9,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthorizationService {
 
+    public void checkPurchaseBaseAccess(User user, Base base) {
+        if (user.getRole() == Role.LOGISTICS_OFFICER) {
+            return;
+        }
+
+        checkBaseAccess(user, base);
+    }
+
     public void checkBaseAccess(User user, Base base) {
 
         if (user.getRole() == Role.ADMIN) {
@@ -19,29 +27,25 @@ public class AuthorizationService {
 
             if (user.getBase() == null) {
                 throw new AccessDeniedException(
-                        "Base commander is not assigned to a base"
-                );
+                        "Base commander is not assigned to a base");
             }
 
             if (!user.getBase().getId().equals(base.getId())) {
                 throw new AccessDeniedException(
-                        "You are not authorized to access this base"
-                );
+                        "You are not authorized to access this base");
             }
 
             return;
         }
 
         throw new AccessDeniedException(
-                "You are not authorized to perform this operation"
-        );
+                "You are not authorized to perform this operation");
     }
 
     public void checkTransferAccess(
             User user,
             Base fromBase,
-            Base toBase
-    ) {
+            Base toBase) {
 
         if (user.getRole() == Role.ADMIN) {
             return;
@@ -55,8 +59,7 @@ public class AuthorizationService {
 
             if (user.getBase() == null) {
                 throw new AccessDeniedException(
-                        "Base commander is not assigned to a base"
-                );
+                        "Base commander is not assigned to a base");
             }
 
             Long assignedBaseId = user.getBase().getId();
@@ -65,15 +68,13 @@ public class AuthorizationService {
                     !assignedBaseId.equals(toBase.getId())) {
 
                 throw new AccessDeniedException(
-                        "You are not authorized for this transfer"
-                );
+                        "You are not authorized for this transfer");
             }
 
             return;
         }
 
         throw new AccessDeniedException(
-                "You are not authorized to perform this operation"
-        );
+                "You are not authorized to perform this operation");
     }
 }

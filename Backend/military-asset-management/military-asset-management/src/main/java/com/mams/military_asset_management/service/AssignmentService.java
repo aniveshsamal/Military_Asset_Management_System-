@@ -16,6 +16,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 
+import com.mams.military_asset_management.entity.Role;
+import org.springframework.security.access.AccessDeniedException;
+
+import java.util.List;
+
+
 @Service
 public class AssignmentService {
 
@@ -26,6 +32,7 @@ public class AssignmentService {
     private final AuditLogRepository auditLogRepository;
     private final AuthorizationService authorizationService;
     private final CurrentUserService currentUserService;
+
 
     public AssignmentService(
             AssignmentRepository assignmentRepository,
@@ -161,5 +168,176 @@ public class AssignmentService {
         auditLogRepository.save(auditLog);
 
         return savedAssignment;
+    }
+    @Transactional
+    public Assignment returnAssignment(Long assignmentId) {
+
+        User user = currentUserService.getCurrentUser();
+
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Assignment not found")
+                );
+
+        if (!"ACTIVE".equals(assignment.getStatus())) {
+            throw new IllegalArgumentException(
+                    "Assignment is already returned"
+            );
+        }
+
+        authorizationService.checkBaseAccess(
+                user,
+                assignment.getBase()
+        );
+
+        Inventory inventory = inventoryRepository
+                .findByBaseAndEquipmentType(
+                        assignment.getBase(),
+                        assignment.getEquipmentType()
+                )
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Inventory record not found"
+                        )
+                );
+
+        if (inventory.getAssignedQuantity() < assignment.getQuantity()) {
+            throw new IllegalArgumentException(
+                    "Assigned quantity is inconsistent with inventory"
+            );
+        }
+
+        inventory.setAssignedQuantity(
+                inventory.getAssignedQuantity()
+                        - assignment.getQuantity()
+        );
+
+        inventoryRepository.save(inventory);
+
+        assignment.setStatus("RETURNED");
+
+        Assignment savedAssignment =
+                assignmentRepository.save(assignment);
+
+        AuditLog auditLog = new AuditLog();
+
+        auditLog.setUser(user);
+        auditLog.setAction("ASSIGNMENT_RETURNED");
+        auditLog.setEntityType("ASSIGNMENT");
+        auditLog.setEntityId(savedAssignment.getId());
+        auditLog.setBase(assignment.getBase());
+        auditLog.setStatus("SUCCESS");
+
+        auditLog.setDetails(
+                "Returned "
+                        + assignment.getQuantity()
+                        + " units of "
+                        + assignment.getEquipmentType().getName()
+                        + " from "
+                        + assignment.getPersonnelName()
+        );
+
+        auditLogRepository.save(auditLog);
+
+        return savedAssignment;
+    }
+
+    public List<Assignment> getAssignments(
+            Long baseId,
+            Long equipmentTypeId,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        User user = currentUserService.getCurrentUser();
+
+        if (endDate == null) {
+            endDate = LocalDate.now();
+        }
+
+        if (startDate == null) {
+            startDate = endDate;
+        }
+
+        if (startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException(
+                    "Start date cannot be after end date"
+            );
+        }
+
+        // Base Commander can only view assignments from their assigned base
+        if (user.getRole() == Role.BASE_COMMANDER) {
+
+            if (user.getBase() == null) {
+                throw new AccessDeniedException(
+                        "Base commander is not assigned to a base"
+                );
+            }
+
+            if (baseId != null &&
+                    !user.getBase().getId().equals(baseId)) {
+
+                throw new AccessDeniedException(
+                        "You are not authorized to access this base"
+                );
+            }
+
+            baseId = user.getBase().getId();
+        }
+
+        Base base = null;
+
+        if (baseId != null) {
+            base = baseRepository.findById(baseId)
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "Base not found"
+                            )
+                    );
+        }
+
+        EquipmentType equipmentType = null;
+
+        if (equipmentTypeId != null) {
+            equipmentType =
+                    equipmentTypeRepository.findById(equipmentTypeId)
+                            .orElseThrow(() ->
+                                    new IllegalArgumentException(
+                                            "Equipment type not found"
+                                    )
+                            );
+        }
+
+        if (base != null && equipmentType != null) {
+            return assignmentRepository
+                    .findByBaseAndEquipmentTypeAndAssignmentDateBetween(
+                            base,
+                            equipmentType,
+                            startDate,
+                            endDate
+                    );
+        }
+
+        if (base != null) {
+            return assignmentRepository
+                    .findByBaseAndAssignmentDateBetween(
+                            base,
+                            startDate,
+                            endDate
+                    );
+        }
+
+        if (equipmentType != null) {
+            return assignmentRepository
+                    .findByEquipmentTypeAndAssignmentDateBetween(
+                            equipmentType,
+                            startDate,
+                            endDate
+                    );
+        }
+
+        return assignmentRepository.findByAssignmentDateBetween(
+                startDate,
+                endDate
+        );
     }
 }

@@ -3,11 +3,19 @@ package com.mams.military_asset_management.repository;
 import com.mams.military_asset_management.entity.AuditLog;
 import com.mams.military_asset_management.entity.Base;
 import com.mams.military_asset_management.entity.User;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
+
+    @Override
+    @EntityGraph(attributePaths = {
+            "user",
+            "base"
+    })
+    List<AuditLog> findAll();
 
     List<AuditLog> findByUser(User user);
 

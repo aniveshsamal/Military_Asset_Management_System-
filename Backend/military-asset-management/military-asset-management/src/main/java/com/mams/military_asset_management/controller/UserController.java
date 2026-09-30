@@ -5,6 +5,7 @@ import com.mams.military_asset_management.entity.User;
 import com.mams.military_asset_management.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,97 +14,89 @@ import java.util.List;
 @RequestMapping("/api/users")
 public class UserController {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+        private final UserRepository userRepository;
+        private final PasswordEncoder passwordEncoder;
 
-    public UserController(
-            UserRepository userRepository,
-            PasswordEncoder passwordEncoder
-    ) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-    }
-
-    @GetMapping
-    public List<UserResponse> getAllUsers() {
-
-        return userRepository.findAll()
-                .stream()
-                .map(this::toUserResponse)
-                .toList();
-    }
-
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public UserResponse createUser(
-            @RequestBody User user
-    ) {
-
-        if (user.getName() == null ||
-                user.getName().isBlank()) {
-
-            throw new IllegalArgumentException(
-                    "Name is required"
-            );
+        public UserController(
+                        UserRepository userRepository,
+                        PasswordEncoder passwordEncoder) {
+                this.userRepository = userRepository;
+                this.passwordEncoder = passwordEncoder;
         }
 
-        if (user.getEmail() == null ||
-                user.getEmail().isBlank()) {
+        @GetMapping
+        @Transactional(readOnly = true)
+        public List<UserResponse> getAllUsers() {
 
-            throw new IllegalArgumentException(
-                    "Email is required"
-            );
+                return userRepository.findAll()
+                                .stream()
+                                .map(this::toUserResponse)
+                                .toList();
         }
 
-        if (user.getPassword() == null ||
-                user.getPassword().isBlank()) {
+        @PostMapping
+        @ResponseStatus(HttpStatus.CREATED)
+        public UserResponse createUser(
+                        @RequestBody User user) {
 
-            throw new IllegalArgumentException(
-                    "Password is required"
-            );
+                if (user.getName() == null ||
+                                user.getName().isBlank()) {
+
+                        throw new IllegalArgumentException(
+                                        "Name is required");
+                }
+
+                if (user.getEmail() == null ||
+                                user.getEmail().isBlank()) {
+
+                        throw new IllegalArgumentException(
+                                        "Email is required");
+                }
+
+                if (user.getPassword() == null ||
+                                user.getPassword().isBlank()) {
+
+                        throw new IllegalArgumentException(
+                                        "Password is required");
+                }
+
+                if (user.getRole() == null) {
+
+                        throw new IllegalArgumentException(
+                                        "Role is required");
+                }
+
+                if (userRepository.existsByEmail(user.getEmail())) {
+
+                        throw new IllegalArgumentException(
+                                        "Email already exists");
+                }
+
+                user.setPassword(
+                                passwordEncoder.encode(user.getPassword()));
+
+                User savedUser = userRepository.save(user);
+
+                return toUserResponse(savedUser);
         }
 
-        if (user.getRole() == null) {
+        private UserResponse toUserResponse(User user) {
 
-            throw new IllegalArgumentException(
-                    "Role is required"
-            );
+                Long baseId = null;
+                String baseName = null;
+
+                if (user.getBase() != null) {
+                        baseId = user.getBase().getId();
+                        baseName = user.getBase().getName();
+                }
+
+                return new UserResponse(
+                                user.getId(),
+                                user.getName(),
+                                user.getEmail(),
+                                user.getRole().name(),
+                                baseId,
+                                baseName,
+                                user.isActive());
         }
-
-        if (userRepository.existsByEmail(user.getEmail())) {
-
-            throw new IllegalArgumentException(
-                    "Email already exists"
-            );
-        }
-
-        user.setPassword(
-                passwordEncoder.encode(user.getPassword())
-        );
-
-        User savedUser = userRepository.save(user);
-
-        return toUserResponse(savedUser);
-    }
-
-    private UserResponse toUserResponse(User user) {
-
-        Long baseId = null;
-        String baseName = null;
-
-        if (user.getBase() != null) {
-            baseId = user.getBase().getId();
-            baseName = user.getBase().getName();
-        }
-
-        return new UserResponse(
-                user.getId(),
-                user.getName(),
-                user.getEmail(),
-                user.getRole().name(),
-                baseId,
-                baseName,
-                user.isActive()
-        );
-    }
 }

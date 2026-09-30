@@ -4,6 +4,7 @@ import com.mams.military_asset_management.entity.AuditLog;
 import com.mams.military_asset_management.entity.Base;
 import com.mams.military_asset_management.entity.EquipmentType;
 import com.mams.military_asset_management.entity.Inventory;
+import com.mams.military_asset_management.entity.Role;
 import com.mams.military_asset_management.entity.Transfer;
 import com.mams.military_asset_management.entity.User;
 import com.mams.military_asset_management.repository.AuditLogRepository;
@@ -11,10 +12,12 @@ import com.mams.military_asset_management.repository.BaseRepository;
 import com.mams.military_asset_management.repository.EquipmentTypeRepository;
 import com.mams.military_asset_management.repository.InventoryRepository;
 import com.mams.military_asset_management.repository.TransferRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Service
 public class TransferService {
@@ -205,5 +208,114 @@ public class TransferService {
         auditLogRepository.save(auditLog);
 
         return savedTransfer;
+    }
+
+    public List<Transfer> getTransfers(
+            Long baseId,
+            Long equipmentTypeId,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+
+        User user = currentUserService.getCurrentUser();
+
+        // Default date range
+        if (endDate == null) {
+            endDate = LocalDate.now();
+        }
+
+        if (startDate == null) {
+            startDate = endDate;
+        }
+
+        if (startDate.isAfter(endDate)) {
+            throw new IllegalArgumentException(
+                    "Start date cannot be after end date"
+            );
+        }
+
+        // Base Commander can only access transfers involving their base
+        if (user.getRole() == Role.BASE_COMMANDER) {
+
+            if (user.getBase() == null) {
+                throw new AccessDeniedException(
+                        "Base commander is not assigned to a base"
+                );
+            }
+
+            if (baseId != null &&
+                    !user.getBase().getId().equals(baseId)) {
+
+                throw new AccessDeniedException(
+                        "You are not authorized to access this base"
+                );
+            }
+
+            baseId = user.getBase().getId();
+        }
+
+        Base base = null;
+
+        if (baseId != null) {
+            base = baseRepository.findById(baseId)
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "Base not found"
+                            )
+                    );
+        }
+
+        EquipmentType equipmentType = null;
+
+        if (equipmentTypeId != null) {
+            equipmentType = equipmentTypeRepository.findById(
+                    equipmentTypeId
+            ).orElseThrow(() ->
+                    new IllegalArgumentException(
+                            "Equipment type not found"
+                    )
+            );
+        }
+
+        // Base + Equipment Type + Date
+        if (base != null && equipmentType != null) {
+
+            return transferRepository
+                    .findByBaseAndEquipmentTypeAndTransferDateBetween(
+                            base,
+                            equipmentType,
+                            startDate,
+                            endDate
+                    );
+        }
+
+        // Base + Date
+        if (base != null) {
+
+            return transferRepository
+                    .findByFromBaseOrToBaseAndTransferDate(
+                            base,
+                            base,
+                            startDate,
+                            endDate
+                    );
+        }
+
+        // Equipment Type + Date
+        if (equipmentType != null) {
+
+            return transferRepository
+                    .findByEquipmentTypeAndTransferDateBetween(
+                            equipmentType,
+                            startDate,
+                            endDate
+                    );
+        }
+
+        // Date only
+        return transferRepository.findByTransferDateBetween(
+                startDate,
+                endDate
+        );
     }
 }

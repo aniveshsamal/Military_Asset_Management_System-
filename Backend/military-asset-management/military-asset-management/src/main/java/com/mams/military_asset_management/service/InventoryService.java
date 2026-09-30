@@ -1,4 +1,4 @@
 package com.mams.military_asset_management.service;
 
-public class ExpenditureService {
+public class InventoryService {
 }

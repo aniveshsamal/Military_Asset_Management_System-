@@ -1,6 +1,6 @@
 const API_BASE_URL = (
     import.meta.env.VITE_API_BASE_URL ||
-    "https://military-asset-management-system-a03q.onrender.com/api"
+    "https://military-asset-management-system-a03q.onrender.com"
 ).replace(/\/$/, "");
 
 async function apiRequest(

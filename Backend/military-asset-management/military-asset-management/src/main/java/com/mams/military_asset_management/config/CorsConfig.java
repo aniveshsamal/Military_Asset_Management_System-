@@ -18,10 +18,12 @@ public class CorsConfig {
                 new CorsConfiguration();
 
         configuration.setAllowedOrigins(
-                List.of(
-                        "https://military-asset-management-system-mams.netlify.app"
-                )
-        );
+        List.of(
+                "http://localhost:5173",
+                "https://military-asset-management-system-mams.netlify.app",
+                "https://military-asset-management-system-nu-two.vercel.app"
+        )
+);
 
         configuration.setAllowedMethods(
                 List.of(

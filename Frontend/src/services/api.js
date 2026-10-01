@@ -1,5 +1,6 @@
 const API_BASE_URL = (
-    import.meta.env.VITE_API_BASE_URL || "https://military-asset-management-system-a03q.onrender.com/api"
+    import.meta.env.VITE_API_BASE_URL ||
+    "https://military-asset-management-system-a03q.onrender.com/api"
 ).replace(/\/$/, "");
 
 async function apiRequest(
@@ -29,11 +30,26 @@ async function apiRequest(
         return null;
     }
 
-    const data = await response.json();
+    const contentType = response.headers.get("content-type") || "";
+    const responseText = await response.text();
+
+    let data = {};
+
+    if (responseText && contentType.includes("application/json")) {
+        try {
+            data = JSON.parse(responseText);
+        } catch {
+            throw new Error("Invalid JSON response from server");
+        }
+    } else if (responseText) {
+        data = {
+            message: responseText
+        };
+    }
 
     if (!response.ok) {
         throw new Error(
-            data.message || "Request failed"
+            data.message || `Request failed with status ${response.status}`
         );
     }
 

@@ -19,7 +19,7 @@ public class CorsConfig {
 
         configuration.setAllowedOrigins(
                 List.of(
-                        "http://localhost:5173"
+                        "https://military-asset-management-system-mams.netlify.app"
                 )
         );
 
